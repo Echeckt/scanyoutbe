@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0b0b0c" />
+  <title>EcomTube Scanner — YouTube FR</title>
+  <meta name="description" content="Découvre les chaînes YouTube FR e-commerce et analyse les liens présents dans leurs descriptions." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2224%22 fill=%22%230b0b0c%22/><path d=%22M24 28h52v13H40v10h31v12H40v10h37v13H24z%22 fill=%22%23ff6a00%22/></svg>" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark">E</div>
+      <div>
+        <strong>EcomTube Scanner</strong>
+        <span>YouTube FR intelligence</span>
+      </div>
+    </div>
+    <div class="top-actions">
+      <div id="apiStatus" class="status-pill"><span></span> Vérification…</div>
+      <a class="button ghost" href="/api/export.csv">Exporter CSV</a>
+    </div>
+  </header>
+
+  <main class="page">
+    <section class="hero panel">
+      <div class="eyebrow">YOUTUBE E-COMMERCE FR</div>
+      <h1>Repère les chaînes. <span>Récupère leurs liens.</span></h1>
+      <p>Recherche une niche, scanne les vidéos d'une chaîne et découvre les outils, sponsors, réseaux et liens d'affiliation utilisés dans les descriptions.</p>
+
+      <form id="discoverForm" class="searchbar">
+        <input id="query" type="text" placeholder="Ex. ecommerce, dropshipping, Shopify, Amazon FBA…" value="ecommerce" autocomplete="off" />
+        <select id="maxResults" aria-label="Nombre de chaînes">
+          <option value="10">10 chaînes</option>
+          <option value="25" selected>25 chaînes</option>
+          <option value="50">50 chaînes</option>
+        </select>
+        <button class="button primary" type="submit">Trouver les chaînes</button>
+      </form>
+      <p class="quota-note">La découverte cible la France + le français. YouTube ne fournit pas un filtre “chaîne e-commerce FR” strict.</p>
+    </section>
+
+    <section class="metrics" id="metrics">
+      <article class="metric"><span>Chaînes</span><strong id="statChannels">0</strong><small>en base</small></article>
+      <article class="metric"><span>Vidéos</span><strong id="statVideos">0</strong><small>analysées</small></article>
+      <article class="metric"><span>Liens</span><strong id="statLinks">0</strong><small>extraits</small></article>
+      <article class="metric"><span>Domaines</span><strong id="statDomains">0</strong><small>uniques</small></article>
+    </section>
+
+    <section class="grid-layout">
+      <div class="panel main-panel">
+        <div class="section-head">
+          <div>
+            <div class="eyebrow">DÉCOUVERTE</div>
+            <h2>Chaînes trouvées</h2>
+          </div>
+          <div id="discoverMeta" class="muted">Lance une recherche.</div>
+        </div>
+        <div id="channels" class="channel-list empty-state">Aucune chaîne chargée.</div>
+      </div>
+
+      <aside class="panel side-panel">
+        <div class="section-head compact">
+          <div>
+            <div class="eyebrow">TOP DOMAINES</div>
+            <h2>Qui est partout ?</h2>
+          </div>
+        </div>
+        <div id="domains" class="domain-list empty-state">Scanne des chaînes pour générer le classement.</div>
+      </aside>
+    </section>
+
+    <section class="panel links-panel">
+      <div class="section-head">
+        <div>
+          <div class="eyebrow">INTELLIGENCE</div>
+          <h2>Derniers liens détectés</h2>
+        </div>
+        <div class="filters">
+          <input id="linkFilter" type="search" placeholder="Filtrer domaine, chaîne, vidéo…" />
+          <select id="categoryFilter">
+            <option value="">Toutes catégories</option>
+            <option value="other">Autre</option>
+            <option value="ecommerce">E-commerce</option>
+            <option value="social">Social</option>
+            <option value="shortener">Shortener</option>
+            <option value="youtube">YouTube</option>
+          </select>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Chaîne</th>
+              <th>Vidéo</th>
+              <th>Domaine</th>
+              <th>Type</th>
+              <th>Affiliation</th>
+              <th>Lien</th>
+            </tr>
+          </thead>
+          <tbody id="linksBody">
+            <tr><td colspan="6" class="empty-cell">Aucun lien détecté pour le moment.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" role="status"></div>
+  <script src="/app.js" type="module"></script>
+</body>
+</html>
