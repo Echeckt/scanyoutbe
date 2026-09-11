@@ -38,7 +38,7 @@ npm start
 ```
 
 
-## V4.2 — cache de recherche et gestion du quota
+## V4.3 — cache de recherche et gestion du quota
 
 - Une recherche strictement identique est servie depuis PostgreSQL pendant 24 h sans nouvel appel `search.list`.
 - Si le quota YouTube est atteint, ScanYTB tente d'afficher le dernier résultat mis en cache pour cette recherche.

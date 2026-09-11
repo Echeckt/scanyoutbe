@@ -199,7 +199,6 @@ async function discover(event) {
     state.linkPage = 1;
     state.currentSearchChannelIds = data.channels.map((channel) => channel.id);
     $('#exportSearchDomainsBtn').disabled = !state.currentSearchChannelIds.length;
-    $('#exportSearchBusinessDomainsBtn').disabled = !state.currentSearchChannelIds.length;
     renderChannels();
     renderTelemetry(data);
 
@@ -537,10 +536,12 @@ async function downloadCurrentSearchDomains(businessOnly) {
     return;
   }
 
-  const button = businessOnly ? $('#exportSearchBusinessDomainsBtn') : $('#exportSearchDomainsBtn');
-  button.disabled = true;
-  button.classList.add('loading');
-  button.setAttribute('aria-busy', 'true');
+  const button = businessOnly ? null : $('#exportSearchDomainsBtn');
+  if (button) {
+    button.disabled = true;
+    button.classList.add('loading');
+    button.setAttribute('aria-busy', 'true');
+  }
 
   try {
     const response = await fetch('/api/export-search-domains.txt', {
@@ -575,9 +576,11 @@ async function downloadCurrentSearchDomains(businessOnly) {
   } catch (error) {
     toast(error.message, 'error');
   } finally {
-    button.disabled = false;
-    button.classList.remove('loading');
-    button.removeAttribute('aria-busy');
+    if (button) {
+      button.disabled = false;
+      button.classList.remove('loading');
+      button.removeAttribute('aria-busy');
+    }
   }
 }
 
@@ -617,7 +620,6 @@ $('#scanCompleteModal')?.addEventListener('click', (event) => {
   if (event.target.id === 'scanCompleteModal') closeScanCompleteModal();
 });
 $('#exportSearchDomainsBtn').addEventListener('click', () => downloadCurrentSearchDomains(false));
-$('#exportSearchBusinessDomainsBtn').addEventListener('click', () => downloadCurrentSearchDomains(true));
 $('#linkFilter').addEventListener('input', handleLinkFilterInput);
 $('#categoryFilter').addEventListener('change', () => {
   state.linkPage = 1;
