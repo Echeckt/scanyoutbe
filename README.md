@@ -1,4 +1,4 @@
-# ScanYTB V4.5
+# ScanYTB V4.6
 
 Scanner YouTube pour découvrir les chaînes françaises, analyser leurs descriptions et extraire leurs liens, outils, sponsors, affiliations et noms de domaine.
 
