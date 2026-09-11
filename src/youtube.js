@@ -32,6 +32,10 @@ async function youtubeRequest(endpoint, params = {}) {
     const error = new Error(message);
     error.status = response.status;
     error.details = data?.error || data;
+    const reasons = (data?.error?.errors || []).map((item) => item?.reason).filter(Boolean);
+    if (response.status === 403 && (reasons.includes('quotaExceeded') || /quota/i.test(message))) {
+      error.code = 'YOUTUBE_QUOTA_EXCEEDED';
+    }
     throw error;
   }
 

@@ -206,10 +206,19 @@ async function discover(event) {
     const minimumText = Number(data.filteredByMinimum || 0)
       ? ` · ${data.filteredByMinimum} hors filtres`
       : '';
-    $('#discoverMeta').textContent = `${data.rawResults} résultats YouTube · ${data.uniqueCandidates} chaînes uniques · ${data.count} FR retenues · ${data.rejected} étrangères${minimumText} · ${data.cacheHits} vérifs cache`;
+    const sourceText = data.servedFromCache
+      ? (data.quotaReached ? ' · quota YouTube atteint · résultats du cache' : ' · cache recherche · 0 appel YouTube')
+      : '';
+    $('#discoverMeta').textContent = `${data.rawResults} résultats YouTube · ${data.uniqueCandidates} chaînes uniques · ${data.count} FR retenues · ${data.rejected} étrangères${minimumText} · ${data.cacheHits} vérifs cache${sourceText}`;
 
     const modeLabel = data.mode === 'deep' ? 'Recherche profonde' : 'Recherche rapide';
-    toast(`${modeLabel} terminée : ${data.count} chaîne${data.count > 1 ? 's' : ''} FR trouvée${data.count > 1 ? 's' : ''}.`);
+    if (data.quotaReached) {
+      toast(`Quota YouTube atteint : résultats déjà enregistrés affichés depuis le cache.`, 'error');
+    } else if (data.servedFromCache) {
+      toast(`Résultats réutilisés depuis le cache : aucun quota de recherche consommé.`);
+    } else {
+      toast(`${modeLabel} terminée : ${data.count} chaîne${data.count > 1 ? 's' : ''} FR trouvée${data.count > 1 ? 's' : ''}.`);
+    }
     refreshStats();
   } catch (error) {
     $('#discoverMeta').textContent = 'Échec de la recherche.';

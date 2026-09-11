@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
 import helmet from 'helmet';
@@ -17,7 +18,9 @@ import {
   getDomainOccurrences,
   updateVideoViewCounts,
   getDomainStats,
-  getStats
+  getStats,
+  getDiscoveryCache,
+  saveDiscoveryCache
 } from './repository.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -40,7 +43,7 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 app.get('/api/health', async (_req, res) => {
   res.json({
     ok: true,
-    version: '4.1.0',
+    version: '4.2.0',
     youtubeKeyConfigured: Boolean(process.env.YOUTUBE_API_KEY),
     databaseConfigured: hasDatabase(),
     timestamp: new Date().toISOString()
@@ -57,42 +60,97 @@ app.post('/api/discover', async (req, res, next) => {
     const minSubscribers = Math.max(Number(req.body?.minSubscribers || 0), 0);
     const maxSubscribers = Math.max(Number(req.body?.maxSubscribers || 0), 0);
     const minVideos = Math.max(Number(req.body?.minVideos || 0), 0);
+    const forceRefresh = req.body?.forceRefresh === true;
     if (maxSubscribers && maxSubscribers < minSubscribers) {
       return res.status(400).json({ error: 'Le maximum d’abonnés doit être supérieur ou égal au minimum.' });
     }
 
-    // V3: les chaînes déjà vérifiées (FR ou étrangères) sont réutilisées pendant 30 jours.
-    const cachedChannels = await getKnownChannels(10000);
-    const result = await discoverChannels({
-      query,
-      mode,
-      maxResults,
-      minSubscribers,
-      maxSubscribers,
-      minVideos,
-      cachedChannels
-    });
+    const cacheParams = { mode, maxResults, minSubscribers, maxSubscribers, minVideos };
+    const normalizedQuery = query.toLowerCase().replace(/\s+/g, ' ').trim();
+    const cacheKey = crypto
+      .createHash('sha256')
+      .update(JSON.stringify({ query: normalizedQuery, ...cacheParams }))
+      .digest('hex');
 
-    // On mémorise tous les candidats, y compris ceux hors filtres et les chaînes étrangères.
-    // Les chaînes déjà vérifiées n'auront pas besoin d'une nouvelle analyse linguistique demain.
-    await Promise.all(result.rememberedChannels.map((channel) => saveChannel(channel)));
+    // Par défaut, une recherche identique faite dans les 24 h ne consomme aucun appel search.list.
+    if (!forceRefresh) {
+      const cached = await getDiscoveryCache(cacheKey, { maxAgeHours: 24, allowStale: false });
+      if (cached?.payload) {
+        return res.json({
+          ...cached.payload,
+          servedFromCache: true,
+          cacheStale: false,
+          quotaReached: false,
+          cacheAgeSeconds: Math.max(0, Math.round((cached.ageMs || 0) / 1000))
+        });
+      }
+    }
 
-    res.json({
-      query,
-      mode: result.mode,
-      count: result.channels.length,
-      rawResults: result.rawResults,
-      uniqueCandidates: result.uniqueCandidates,
-      eligibleCandidates: result.eligibleCandidates,
-      inspected: result.inspected,
-      rejected: result.rejected,
-      filteredByMinimum: result.filteredByMinimum,
-      cacheHits: result.cacheHits,
-      freshChecks: result.freshChecks,
-      searchCalls: result.searchCalls,
-      searchQueries: result.searchQueries,
-      channels: result.channels
-    });
+    try {
+      const cachedChannels = await getKnownChannels(10000);
+      const result = await discoverChannels({
+        query,
+        mode,
+        maxResults,
+        minSubscribers,
+        maxSubscribers,
+        minVideos,
+        cachedChannels
+      });
+
+      await Promise.all(result.rememberedChannels.map((channel) => saveChannel(channel)));
+
+      const payload = {
+        query,
+        mode: result.mode,
+        count: result.channels.length,
+        rawResults: result.rawResults,
+        uniqueCandidates: result.uniqueCandidates,
+        eligibleCandidates: result.eligibleCandidates,
+        inspected: result.inspected,
+        rejected: result.rejected,
+        filteredByMinimum: result.filteredByMinimum,
+        cacheHits: result.cacheHits,
+        freshChecks: result.freshChecks,
+        searchCalls: result.searchCalls,
+        searchQueries: result.searchQueries,
+        channels: result.channels
+      };
+
+      await saveDiscoveryCache(cacheKey, {
+        query: normalizedQuery,
+        mode,
+        params: cacheParams,
+        payload
+      });
+
+      return res.json({
+        ...payload,
+        servedFromCache: false,
+        cacheStale: false,
+        quotaReached: false,
+        cacheAgeSeconds: 0
+      });
+    } catch (error) {
+      if (error?.code !== 'YOUTUBE_QUOTA_EXCEEDED') throw error;
+
+      // Si le quota YouTube est atteint, on ne tente pas de le contourner : on sert le dernier cache disponible.
+      const cached = await getDiscoveryCache(cacheKey, { maxAgeHours: 24, allowStale: true });
+      if (cached?.payload) {
+        return res.json({
+          ...cached.payload,
+          servedFromCache: true,
+          cacheStale: true,
+          quotaReached: true,
+          cacheAgeSeconds: Math.max(0, Math.round((cached.ageMs || 0) / 1000))
+        });
+      }
+
+      const quotaError = new Error('Quota de recherche YouTube atteint. Aucune version en cache n’est disponible pour cette recherche. Réessaie après le reset du quota ou demande une extension de quota YouTube.');
+      quotaError.status = 429;
+      quotaError.code = 'YOUTUBE_SEARCH_QUOTA_EXCEEDED';
+      throw quotaError;
+    }
   } catch (error) {
     next(error);
   }
@@ -449,6 +507,7 @@ app.use((error, _req, res, _next) => {
   const status = Number(error.status) || 500;
   res.status(status).json({
     error: error.message || 'Erreur interne.',
+    code: error.code || undefined,
     details: process.env.NODE_ENV === 'development' ? error.details : undefined
   });
 });

@@ -75,6 +75,16 @@ export async function initDatabase() {
       UNIQUE(video_id, normalized_url)
     );
 
+    CREATE TABLE IF NOT EXISTS discovery_cache (
+      cache_key TEXT PRIMARY KEY,
+      query TEXT NOT NULL,
+      mode TEXT NOT NULL,
+      params JSONB NOT NULL DEFAULT '{}'::jsonb,
+      payload JSONB NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
     ALTER TABLE channels ADD COLUMN IF NOT EXISTS default_language TEXT;
     ALTER TABLE channels ADD COLUMN IF NOT EXISTS is_french BOOLEAN;
     ALTER TABLE channels ADD COLUMN IF NOT EXISTS fr_confidence INTEGER;
@@ -92,6 +102,7 @@ export async function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_channels_last_scanned_at ON channels(last_scanned_at DESC);
     CREATE INDEX IF NOT EXISTS idx_channels_last_verified_at ON channels(last_verified_at DESC);
     CREATE INDEX IF NOT EXISTS idx_channels_is_french ON channels(is_french);
+    CREATE INDEX IF NOT EXISTS idx_discovery_cache_updated_at ON discovery_cache(updated_at DESC);
   `);
 
   return true;

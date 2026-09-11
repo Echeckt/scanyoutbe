@@ -36,3 +36,11 @@ npm install
 npm run check
 npm start
 ```
+
+
+## V4.2 — cache de recherche et gestion du quota
+
+- Une recherche strictement identique est servie depuis PostgreSQL pendant 24 h sans nouvel appel `search.list`.
+- Si le quota YouTube est atteint, ScanYTB tente d'afficher le dernier résultat mis en cache pour cette recherche.
+- Si aucun cache n'existe, l'interface affiche une erreur claire au lieu de relancer des appels inutiles.
+- Aucun mécanisme de rotation de projets/clefs pour contourner les quotas YouTube n'est inclus.

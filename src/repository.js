@@ -3,7 +3,8 @@ import { getPool, hasDatabase } from './db.js';
 const memory = {
   channels: new Map(),
   videos: new Map(),
-  links: new Map()
+  links: new Map(),
+  discoveryCache: new Map()
 };
 
 function linkKey(videoId, normalizedUrl) {
@@ -32,6 +33,91 @@ function mapChannelRow(row) {
     lastDiscoveredAt: row.last_discovered_at,
     lastVerifiedAt: row.last_verified_at,
     lastScannedAt: row.last_scanned_at
+  };
+}
+
+export async function getDiscoveryCache(cacheKey, { maxAgeHours = 24, allowStale = false } = {}) {
+  const key = String(cacheKey || '').trim();
+  if (!key) return null;
+  const maxAgeMs = Math.max(Number(maxAgeHours) || 24, 0) * 60 * 60 * 1000;
+
+  if (!hasDatabase()) {
+    const item = memory.discoveryCache.get(key);
+    if (!item) return null;
+    const ageMs = Date.now() - new Date(item.updatedAt).getTime();
+    if (!allowStale && ageMs > maxAgeMs) return null;
+    return { ...item, ageMs, stale: ageMs > maxAgeMs };
+  }
+
+  const result = await getPool().query(`
+    SELECT cache_key, query, mode, params, payload, created_at, updated_at
+    FROM discovery_cache
+    WHERE cache_key = $1
+    LIMIT 1
+  `, [key]);
+
+  const row = result.rows[0];
+  if (!row) return null;
+  const ageMs = Date.now() - new Date(row.updated_at).getTime();
+  if (!allowStale && ageMs > maxAgeMs) return null;
+  return {
+    cacheKey: row.cache_key,
+    query: row.query,
+    mode: row.mode,
+    params: row.params || {},
+    payload: row.payload,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    ageMs,
+    stale: ageMs > maxAgeMs
+  };
+}
+
+export async function saveDiscoveryCache(cacheKey, { query, mode, params, payload }) {
+  const key = String(cacheKey || '').trim();
+  if (!key) return null;
+  const now = new Date().toISOString();
+
+  if (!hasDatabase()) {
+    const existing = memory.discoveryCache.get(key);
+    const value = {
+      cacheKey: key,
+      query,
+      mode,
+      params: params || {},
+      payload,
+      createdAt: existing?.createdAt || now,
+      updatedAt: now,
+      ageMs: 0,
+      stale: false
+    };
+    memory.discoveryCache.set(key, value);
+    return value;
+  }
+
+  const result = await getPool().query(`
+    INSERT INTO discovery_cache (cache_key, query, mode, params, payload, created_at, updated_at)
+    VALUES ($1,$2,$3,$4::jsonb,$5::jsonb,NOW(),NOW())
+    ON CONFLICT (cache_key) DO UPDATE SET
+      query = EXCLUDED.query,
+      mode = EXCLUDED.mode,
+      params = EXCLUDED.params,
+      payload = EXCLUDED.payload,
+      updated_at = NOW()
+    RETURNING cache_key, query, mode, params, payload, created_at, updated_at
+  `, [key, query, mode, JSON.stringify(params || {}), JSON.stringify(payload)]);
+
+  const row = result.rows[0];
+  return {
+    cacheKey: row.cache_key,
+    query: row.query,
+    mode: row.mode,
+    params: row.params || {},
+    payload: row.payload,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    ageMs: 0,
+    stale: false
   };
 }
 
