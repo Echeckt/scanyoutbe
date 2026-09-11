@@ -111,3 +111,11 @@ Exemple :
 - `GET /api/domains`
 - `GET /api/stats`
 - `GET /api/export.csv`
+
+
+## Exports domaines V3.2
+
+- `/api/export-domains.txt` : tous les noms de domaine racine uniques, un par ligne.
+- `/api/export-business-domains.txt` : domaines business uniquement (réseaux sociaux, YouTube, messageries et raccourcisseurs écartés), un par ligne.
+
+Les sous-domaines sont ramenés au domaine enregistrable : `app.minea.com` devient `minea.com`, `shopify.pxf.io` devient `pxf.io`.

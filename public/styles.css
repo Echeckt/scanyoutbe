@@ -54,7 +54,7 @@ a { color: inherit; }
 }
 .brand strong { display: block; font-size: 14px; }
 .brand span { display: block; margin-top: 2px; color: var(--muted); font-size: 11px; }
-.top-actions { display: flex; align-items: center; gap: 10px; }
+.top-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
 
 .page { width: min(1460px, calc(100% - 36px)); margin: 28px auto 70px; }
 .panel {
@@ -350,4 +350,9 @@ td a:hover { color: var(--orange); }
   .sort-control, .sort-control select { width: 100%; }
   .bulk-actions { width: 100%; }
   .channel-meta { gap: 6px 8px; }
+}
+
+.domain-export { white-space: nowrap; }
+@media (max-width: 1180px) {
+  .top-actions .button { padding: 9px 11px; font-size: 11px; }
 }

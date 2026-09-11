@@ -37,7 +37,7 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 app.get('/api/health', async (_req, res) => {
   res.json({
     ok: true,
-    version: '3.1.0',
+    version: '3.2.0',
     youtubeKeyConfigured: Boolean(process.env.YOUTUBE_API_KEY),
     databaseConfigured: hasDatabase(),
     timestamp: new Date().toISOString()
@@ -182,6 +182,93 @@ app.get('/api/stats', async (_req, res, next) => {
   }
 });
 
+const NON_BUSINESS_ROOT_DOMAINS = new Set([
+  'youtube.com', 'youtu.be',
+  'instagram.com', 'tiktok.com', 'x.com', 'twitter.com', 'facebook.com',
+  'linkedin.com', 'discord.gg', 'discord.com', 't.me', 'telegram.me',
+  'snapchat.com', 'pinterest.com', 'threads.net', 'whatsapp.com', 'wa.me',
+  'bit.ly', 'tinyurl.com', 'cutt.ly', 'linktr.ee', 'beacons.ai', 'bio.site',
+  'lnk.bio', 'stan.store', 'solo.to', 'taplink.cc', 'msha.ke', 'urlz.fr',
+  'c3po.link', 'taap.it'
+]);
+
+const COMMON_MULTI_PART_SUFFIXES = new Set([
+  'co.uk', 'org.uk', 'me.uk', 'ac.uk',
+  'com.au', 'net.au', 'org.au',
+  'co.nz', 'com.br', 'com.mx', 'com.tr',
+  'co.jp', 'co.kr', 'com.sg', 'com.hk',
+  'co.in', 'com.cn', 'com.tw', 'co.za'
+]);
+
+function toRootDomain(hostname = '') {
+  const cleaned = String(hostname || '')
+    .trim()
+    .toLowerCase()
+    .replace(/^www\./, '')
+    .replace(/\.$/, '');
+
+  if (!cleaned || !cleaned.includes('.')) return null;
+  const parts = cleaned.split('.').filter(Boolean);
+  if (parts.length <= 2) return cleaned;
+
+  const lastTwo = parts.slice(-2).join('.');
+  if (COMMON_MULTI_PART_SUFFIXES.has(lastTwo) && parts.length >= 3) {
+    return parts.slice(-3).join('.');
+  }
+
+  return lastTwo;
+}
+
+function uniqueRootDomains(links, { businessOnly = false } = {}) {
+  const domains = new Set();
+
+  for (const link of links) {
+    const root = toRootDomain(link.domain);
+    if (!root || !root.includes('.')) continue;
+
+    if (businessOnly) {
+      if (['social', 'youtube', 'shortener'].includes(link.category)) continue;
+      if (NON_BUSINESS_ROOT_DOMAINS.has(root)) continue;
+    }
+
+    domains.add(root);
+  }
+
+  return [...domains].sort((a, b) => a.localeCompare(b, 'fr'));
+}
+
+async function sendDomainTxt(res, { businessOnly, filename }) {
+  const links = await getUniqueLinks(100000);
+  const domains = uniqueRootDomains(links, { businessOnly });
+
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.setHeader('X-Domain-Count', String(domains.length));
+  res.send(`\uFEFF${domains.join('\n')}${domains.length ? '\n' : ''}`);
+}
+
+app.get('/api/export-domains.txt', async (_req, res, next) => {
+  try {
+    await sendDomainTxt(res, {
+      businessOnly: false,
+      filename: 'domaines-uniques-tous.txt'
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/export-business-domains.txt', async (_req, res, next) => {
+  try {
+    await sendDomainTxt(res, {
+      businessOnly: true,
+      filename: 'domaines-business-uniques.txt'
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.get('/api/export-unique.csv', async (_req, res, next) => {
   try {
     const links = await getUniqueLinks(100000);
@@ -273,7 +360,7 @@ async function bootstrap() {
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`YouTube Ecom FR Scanner v3 running on port ${PORT}`);
+    console.log(`YouTube Ecom FR Scanner v3.2 running on port ${PORT}`);
   });
 }
 
