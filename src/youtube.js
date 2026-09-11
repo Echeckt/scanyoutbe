@@ -22,7 +22,7 @@ async function youtubeRequest(endpoint, params = {}) {
   }
 
   const response = await fetch(url, {
-    headers: { 'User-Agent': 'YouTube-Ecom-FR-Scanner/3.5' },
+    headers: { 'User-Agent': 'YouTube-Ecom-FR-Scanner/3.6' },
     signal: AbortSignal.timeout(25_000)
   });
 

@@ -442,3 +442,5 @@ td a:hover { color: var(--orange); }
 
 .views-cell { white-space: nowrap; font-variant-numeric: tabular-nums; color: #e4e4e8; }
 .views-cell strong { color: #f4f4f6; font-weight: 850; }
+
+.date-cell { white-space: nowrap; color: #b8b8bf; font-variant-numeric: tabular-nums; }

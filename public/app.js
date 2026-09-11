@@ -12,6 +12,13 @@ const state = {
 const $ = (selector) => document.querySelector(selector);
 const fmt = new Intl.NumberFormat('fr-FR', { notation: 'compact', maximumFractionDigits: 1 });
 const exactFmt = new Intl.NumberFormat('fr-FR');
+const dateFmt = new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+function formatVideoDate(value) {
+  if (!value) return '—';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '—' : dateFmt.format(date);
+}
 
 function escapeHtml(value = '') {
   return String(value)
@@ -46,7 +53,7 @@ async function loadHealth() {
     const status = $('#apiStatus');
     if (health.youtubeKeyConfigured) {
       status.className = 'status-pill ok';
-      status.innerHTML = `<span></span> API YouTube prête${health.databaseConfigured ? ' · PostgreSQL' : ' · mémoire'} · V3.5`;
+      status.innerHTML = `<span></span> API YouTube prête${health.databaseConfigured ? ' · PostgreSQL' : ' · mémoire'} · V3.6`;
     } else {
       status.className = 'status-pill error';
       status.innerHTML = '<span></span> Clé YouTube manquante';
@@ -408,7 +415,7 @@ function renderLinks() {
 
   if (!links.length) {
     const global = Array.isArray(state.globalLinkResults);
-    body.innerHTML = `<tr><td colspan="7" class="empty-cell">${global && state.globalLinkQuery ? `Aucune occurrence de <strong>${escapeHtml(state.globalLinkQuery)}</strong> dans toute la base scannée.` : 'Aucun lien correspondant.'}</td></tr>`;
+    body.innerHTML = `<tr><td colspan="8" class="empty-cell">${global && state.globalLinkQuery ? `Aucune occurrence de <strong>${escapeHtml(state.globalLinkQuery)}</strong> dans toute la base scannée.` : 'Aucun lien correspondant.'}</td></tr>`;
     return;
   }
 
@@ -417,6 +424,7 @@ function renderLinks() {
       <td><span class="truncate" title="${escapeHtml(link.channelTitle)}">${escapeHtml(link.channelTitle)}</span></td>
       <td><a class="truncate" href="${escapeHtml(link.youtubeUrl || `https://www.youtube.com/watch?v=${link.videoId}`)}" target="_blank" rel="noopener" title="${escapeHtml(link.videoTitle)}">${escapeHtml(link.videoTitle)}</a></td>
       <td class="views-cell" title="${link.viewCount === null || link.viewCount === undefined ? 'Nombre de vues non disponible' : `${exactFmt.format(Number(link.viewCount))} vues`}">${link.viewCount === null || link.viewCount === undefined ? '—' : `<strong>${fmt.format(Number(link.viewCount))}</strong>`}</td>
+      <td class="date-cell" title="${escapeHtml(link.publishedAt || '')}">${escapeHtml(formatVideoDate(link.publishedAt))}</td>
       <td><strong>${escapeHtml(link.domain)}</strong></td>
       <td><span class="badge">${escapeHtml(link.category)}</span></td>
       <td><span class="badge ${escapeHtml(link.affiliateLikelihood)}">${escapeHtml(link.affiliateLikelihood)}</span></td>
