@@ -1,4 +1,5 @@
 const API_BASE = 'https://www.googleapis.com/youtube/v3';
+const VERIFICATION_CACHE_DAYS = 30;
 
 function getApiKey() {
   const apiKey = process.env.YOUTUBE_API_KEY;
@@ -21,8 +22,8 @@ async function youtubeRequest(endpoint, params = {}) {
   }
 
   const response = await fetch(url, {
-    headers: { 'User-Agent': 'YouTube-Ecom-FR-Scanner/2.0' },
-    signal: AbortSignal.timeout(20_000)
+    headers: { 'User-Agent': 'YouTube-Ecom-FR-Scanner/3.0' },
+    signal: AbortSignal.timeout(25_000)
   });
 
   const data = await response.json().catch(() => ({}));
@@ -61,19 +62,19 @@ function channelFromApi(channel, discoveredQuery = null) {
 }
 
 const FRENCH_WORDS = new Set([
-  'alors','avec','avoir','beaucoup','bien','bonjour','boutique','business','ce','ces','cette','chez','comment','dans','des','donc','du','elle','en','encore','est','et','faire','france','francais','francaise','gagner','ici','il','je','la','le','les','leur','leurs','mais','mes','mon','nous','notre','pas','plus','pour','pourquoi','quand','que','qui','sans','ses','shopify','site','sont','sur','ta','tes','ton','tout','tous','tu','un','une','vente','vendre','votre','vos','vous'
+  'alors','avec','avoir','beaucoup','bien','bonjour','boutique','business','ce','ces','cette','chez','comment','dans','des','donc','du','elle','en','encore','est','et','faire','france','francais','francaise','gagner','ici','il','je','la','le','les','leur','leurs','mais','mes','mon','nous','notre','pas','plus','pour','pourquoi','quand','que','qui','sans','ses','shopify','site','sont','sur','ta','tes','ton','tout','tous','tu','un','une','vente','vendre','votre','vos','vous','argent','gratuit','formation','produit','produits','client','clients','commande','commandes','marque','marché','marge'
 ]);
 
 const ENGLISH_WORDS = new Set([
-  'about','and','are','best','business','buy','channel','course','dropshipping','ecommerce','for','from','how','learn','make','marketing','my','new','online','shopify','store','the','this','to','video','we','what','with','you','your'
+  'about','and','are','best','business','buy','channel','course','dropshipping','ecommerce','for','from','how','learn','make','marketing','my','new','online','shopify','store','the','this','to','video','we','what','with','you','your','sales','product','products','brand','money','free','tutorial'
 ]);
 
 const SPANISH_WORDS = new Set([
-  'ahora','como','con','curso','de','el','en','es','esta','hacer','la','las','los','mas','mi','negocio','para','por','que','sin','tienda','tu','un','una','vender','ventas','y'
+  'ahora','como','con','curso','de','el','en','es','esta','hacer','la','las','los','mas','mi','negocio','para','por','que','sin','tienda','tu','un','una','vender','ventas','y','producto','productos','dinero'
 ]);
 
 const GERMAN_WORDS = new Set([
-  'aber','auf','aus','bei','das','dein','der','die','ein','eine','für','ist','mit','nicht','oder','shop','und','verkaufen','von','wie','wir','zu'
+  'aber','auf','aus','bei','das','dein','der','die','ein','eine','für','ist','mit','nicht','oder','shop','und','verkaufen','von','wie','wir','zu','produkt','produkte'
 ]);
 
 function normalizeForLanguage(text = '') {
@@ -107,7 +108,8 @@ function scoreTextFrench(text = '') {
   const frenchPhrases = [
     'comment faire', 'business en ligne', 'boutique en ligne', 'gagner de l’argent',
     "gagner de l'argent", 'je vais', 'je vous', 'dans cette vidéo', 'dans cette video',
-    'clique sur', 'lien en description', 'formation gratuite'
+    'clique sur', 'lien en description', 'formation gratuite', 'abonne toi', 'abonne-toi',
+    'dans cette vidéo', 'je te montre', 'je t’explique', "je t'explique"
   ];
   for (const phrase of frenchPhrases) {
     if (normalized.includes(phrase)) fr += 3;
@@ -120,7 +122,6 @@ function scoreTextFrench(text = '') {
     return { score: 45, fr, foreign, evidence, wordCount: words.length };
   }
 
-  // 20 = clairement étranger, 95 = français très net.
   let score = 20 + (75 * fr) / Math.max(evidence, 1);
   if (fr >= 8 && fr >= foreign * 1.7) score += 5;
   if (foreign >= 8 && foreign >= fr * 1.8) score -= 8;
@@ -159,24 +160,22 @@ function classifyFrenchChannel(channel, sampleText = '') {
   const sample = scoreTextFrench(sampleText);
   const declaredLanguage = String(channel.defaultLanguage || '').toLowerCase();
 
-  let confidence;
-  if (sampleText.trim()) {
-    confidence = Math.round(channelText.score * 0.28 + sample.score * 0.72);
-  } else {
-    confidence = channelText.score;
-  }
+  let confidence = sampleText.trim()
+    ? Math.round(channelText.score * 0.28 + sample.score * 0.72)
+    : channelText.score;
 
   const reasons = [];
 
   if (channel.country === 'FR') {
-    confidence = Math.max(confidence, 88);
+    confidence = Math.max(confidence, 90);
     reasons.push('pays FR déclaré');
   } else if (['BE', 'CH', 'CA', 'LU', 'MC'].includes(channel.country)) {
     confidence += 5;
+    reasons.push(`pays francophone possible (${channel.country})`);
   }
 
   if (declaredLanguage === 'fr' || declaredLanguage.startsWith('fr-')) {
-    confidence = Math.max(confidence, 88);
+    confidence = Math.max(confidence, 90);
     reasons.push('langue FR déclarée');
   }
 
@@ -184,8 +183,6 @@ function classifyFrenchChannel(channel, sampleText = '') {
   if (channelText.score >= 72) reasons.push('chaîne rédigée en français');
 
   confidence = Math.max(0, Math.min(100, confidence));
-
-  // On préfère perdre quelques faux négatifs plutôt que polluer la base avec des chaînes étrangères.
   const isFrench = confidence >= 62 || channel.country === 'FR' || declaredLanguage === 'fr' || declaredLanguage.startsWith('fr-');
 
   return {
@@ -207,56 +204,250 @@ async function mapWithConcurrency(items, concurrency, mapper) {
     }
   }
 
-  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker));
+  await Promise.all(Array.from({ length: Math.min(concurrency, Math.max(items.length, 1)) }, worker));
   return results;
 }
 
-export async function discoverChannels({ query, maxResults = 25 }) {
-  const requested = Math.min(Math.max(Number(maxResults) || 25, 1), 50);
-  // On demande davantage de candidats quand possible, puis on élimine les faux positifs non francophones.
-  const candidateCount = Math.min(50, Math.max(requested, requested * 2));
+function uniqueStrings(values) {
+  return [...new Set(values.map((value) => String(value || '').trim()).filter(Boolean))];
+}
 
-  const search = await youtubeRequest('search', {
-    part: 'snippet',
-    type: 'channel',
-    q: query,
-    maxResults: candidateCount,
-    relevanceLanguage: 'fr',
-    regionCode: 'FR'
-  });
-
-  const ids = [...new Set((search.items || [])
-    .map((item) => item?.snippet?.channelId || item?.id?.channelId)
-    .filter(Boolean))];
-
-  if (!ids.length) {
-    return { channels: [], inspected: 0, rejected: 0 };
+function buildSearchPlan(query, mode) {
+  const base = query.trim();
+  if (mode !== 'deep') {
+    return [{ q: base, type: 'channel', label: base }];
   }
 
-  const details = await youtubeRequest('channels', {
-    part: 'snippet,statistics,contentDetails',
-    id: ids.join(','),
-    maxResults: 50
+  const variants = uniqueStrings([
+    base,
+    `${base} france`,
+    `${base} français`,
+    `${base} tutoriel`,
+    `comment faire ${base}`
+  ]);
+
+  return [
+    { q: variants[0], type: 'channel', label: variants[0] },
+    { q: variants[0], type: 'video', label: variants[0] },
+    { q: variants[1], type: 'channel', label: variants[1] },
+    { q: variants[1], type: 'video', label: variants[1] },
+    { q: variants[2], type: 'channel', label: variants[2] },
+    { q: variants[2], type: 'video', label: variants[2] },
+    { q: variants[3], type: 'video', label: variants[3] },
+    { q: variants[4], type: 'video', label: variants[4] }
+  ];
+}
+
+async function searchCandidates(query, mode = 'rapid') {
+  const plan = buildSearchPlan(query, mode);
+  const candidates = new Map();
+  let rawResults = 0;
+  let rank = 0;
+
+  for (const step of plan) {
+    const search = await youtubeRequest('search', {
+      part: 'snippet',
+      type: step.type,
+      q: step.q,
+      maxResults: 50,
+      relevanceLanguage: 'fr',
+      regionCode: 'FR',
+      order: 'relevance'
+    });
+
+    rawResults += (search.items || []).length;
+
+    for (const item of search.items || []) {
+      const channelId = step.type === 'channel'
+        ? (item?.id?.channelId || item?.snippet?.channelId)
+        : item?.snippet?.channelId;
+      if (!channelId) continue;
+
+      if (!candidates.has(channelId)) {
+        candidates.set(channelId, {
+          id: channelId,
+          firstRank: rank++,
+          matchedQueries: new Set(),
+          discoverySources: new Set()
+        });
+      }
+
+      const candidate = candidates.get(channelId);
+      candidate.matchedQueries.add(step.label);
+      candidate.discoverySources.add(step.type);
+    }
+  }
+
+  const candidateLimit = mode === 'deep' ? 250 : 50;
+  return {
+    candidates: [...candidates.values()]
+      .sort((a, b) => a.firstRank - b.firstRank)
+      .slice(0, candidateLimit)
+      .map((candidate) => ({
+        ...candidate,
+        matchedQueries: [...candidate.matchedQueries],
+        discoverySources: [...candidate.discoverySources]
+      })),
+    rawResults,
+    searchCalls: plan.length,
+    searchQueries: uniqueStrings(plan.map((step) => step.label))
+  };
+}
+
+async function fetchChannelDetails(ids, discoveredQuery) {
+  const details = [];
+  for (let index = 0; index < ids.length; index += 50) {
+    const chunk = ids.slice(index, index + 50);
+    const data = await youtubeRequest('channels', {
+      part: 'snippet,statistics,contentDetails',
+      id: chunk.join(','),
+      maxResults: 50
+    });
+    details.push(...(data.items || []).map((channel) => channelFromApi(channel, discoveredQuery)));
+  }
+  return details;
+}
+
+function isVerificationCacheFresh(channel) {
+  if (!channel || typeof channel.isFrench !== 'boolean' || !channel.lastVerifiedAt) return false;
+  const verifiedAt = new Date(channel.lastVerifiedAt).getTime();
+  if (!Number.isFinite(verifiedAt)) return false;
+  return Date.now() - verifiedAt < VERIFICATION_CACHE_DAYS * 24 * 60 * 60 * 1000;
+}
+
+function relevanceScore(channel) {
+  const queryMatches = Number(channel.matchedQueries?.length || 0);
+  const sourceBonus = channel.discoverySources?.includes('channel') ? 8 : 0;
+  const videoBonus = channel.discoverySources?.includes('video') ? 4 : 0;
+  const rankPenalty = Math.min(Number(channel.discoveryRank || 0), 200) / 20;
+  return Math.round((queryMatches * 14 + sourceBonus + videoBonus - rankPenalty) * 10) / 10;
+}
+
+export async function discoverChannels({
+  query,
+  mode = 'rapid',
+  maxResults = 50,
+  minSubscribers = 0,
+  minVideos = 0,
+  cachedChannels = []
+}) {
+  const requested = Math.min(Math.max(Number(maxResults) || 50, 1), 200);
+  const minSubs = Math.max(Number(minSubscribers) || 0, 0);
+  const minVids = Math.max(Number(minVideos) || 0, 0);
+  const discoveryMode = mode === 'deep' ? 'deep' : 'rapid';
+
+  const candidateSearch = await searchCandidates(query, discoveryMode);
+  const candidateIds = candidateSearch.candidates.map((candidate) => candidate.id);
+  if (!candidateIds.length) {
+    return {
+      channels: [],
+      verifiedChannels: [],
+      mode: discoveryMode,
+      rawResults: 0,
+      uniqueCandidates: 0,
+      eligibleCandidates: 0,
+      inspected: 0,
+      rejected: 0,
+      filteredByMinimum: 0,
+      cacheHits: 0,
+      freshChecks: 0,
+      searchCalls: candidateSearch.searchCalls,
+      searchQueries: candidateSearch.searchQueries
+    };
+  }
+
+  const detailRows = await fetchChannelDetails(candidateIds, query);
+  const candidateMeta = new Map(candidateSearch.candidates.map((candidate, index) => [candidate.id, { ...candidate, discoveryRank: index }]));
+  const cache = new Map(cachedChannels.map((channel) => [channel.id, channel]));
+
+  const enriched = detailRows
+    .map((channel) => {
+      const meta = candidateMeta.get(channel.id) || {};
+      return {
+        ...channel,
+        matchedQueries: meta.matchedQueries || [query],
+        discoverySources: meta.discoverySources || ['channel'],
+        discoveryRank: meta.discoveryRank ?? 9999
+      };
+    })
+    .sort((a, b) => a.discoveryRank - b.discoveryRank);
+
+  const eligible = enriched.filter((channel) => channel.subscribers >= minSubs && channel.videoCount >= minVids);
+  const filteredByMinimum = enriched.length - eligible.length;
+  let cacheHits = 0;
+  let freshChecks = 0;
+
+  const checked = await mapWithConcurrency(eligible, discoveryMode === 'deep' ? 8 : 6, async (channel) => {
+    const cached = cache.get(channel.id);
+    let classification;
+    let verificationCached = false;
+    let lastVerifiedAt;
+
+    if (isVerificationCacheFresh(cached)) {
+      cacheHits += 1;
+      verificationCached = true;
+      classification = {
+        isFrench: cached.isFrench,
+        frConfidence: cached.frConfidence,
+        frReason: cached.frReason
+      };
+      lastVerifiedAt = cached.lastVerifiedAt;
+    } else {
+      freshChecks += 1;
+      const sampleText = await getLanguageSample(channel, discoveryMode === 'deep' ? 7 : 6);
+      classification = classifyFrenchChannel(channel, sampleText);
+      lastVerifiedAt = new Date().toISOString();
+    }
+
+    const merged = {
+      ...channel,
+      ...classification,
+      verificationCached,
+      lastVerifiedAt,
+      relevanceScore: 0
+    };
+    merged.relevanceScore = relevanceScore(merged);
+    return merged;
   });
 
-  const rank = new Map(ids.map((id, index) => [id, index]));
-  const candidates = (details.items || [])
-    .map((channel) => channelFromApi(channel, query))
-    .sort((a, b) => (rank.get(a.id) ?? 999) - (rank.get(b.id) ?? 999));
-
-  const checked = await mapWithConcurrency(candidates, 6, async (channel) => {
-    const sampleText = await getLanguageSample(channel, 6);
-    return { ...channel, ...classifyFrenchChannel(channel, sampleText) };
-  });
-
-  const channels = checked
+  const french = checked
     .filter((channel) => channel.isFrench)
+    .sort((a, b) => b.relevanceScore - a.relevanceScore || b.frConfidence - a.frConfidence || b.subscribers - a.subscribers)
     .slice(0, requested);
 
+  const checkedById = new Map(checked.map((channel) => [channel.id, channel]));
+  const rememberedChannels = enriched.map((channel) => {
+    const checkedChannel = checkedById.get(channel.id);
+    if (checkedChannel) return checkedChannel;
+
+    const cached = cache.get(channel.id);
+    if (cached && typeof cached.isFrench === 'boolean') {
+      return {
+        ...channel,
+        isFrench: cached.isFrench,
+        frConfidence: cached.frConfidence,
+        frReason: cached.frReason,
+        lastVerifiedAt: cached.lastVerifiedAt
+      };
+    }
+    return channel;
+  });
+
   return {
-    channels,
+    channels: french,
+    verifiedChannels: checked,
+    rememberedChannels,
+    mode: discoveryMode,
+    rawResults: candidateSearch.rawResults,
+    uniqueCandidates: candidateSearch.candidates.length,
+    eligibleCandidates: eligible.length,
     inspected: checked.length,
-    rejected: checked.filter((channel) => !channel.isFrench).length
+    rejected: checked.filter((channel) => !channel.isFrench).length,
+    filteredByMinimum,
+    cacheHits,
+    freshChecks,
+    searchCalls: candidateSearch.searchCalls,
+    searchQueries: candidateSearch.searchQueries
   };
 }
 

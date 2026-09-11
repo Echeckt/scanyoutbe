@@ -6,7 +6,15 @@ import helmet from 'helmet';
 import { initDatabase, hasDatabase } from './db.js';
 import { discoverChannels, getChannel, getUploadedVideos } from './youtube.js';
 import { extractLinks } from './links.js';
-import { saveChannel, saveScan, getChannels, getLinks, getDomainStats, getStats } from './repository.js';
+import {
+  saveChannel,
+  saveScan,
+  getChannels,
+  getKnownChannels,
+  getLinks,
+  getDomainStats,
+  getStats
+} from './repository.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -28,7 +36,7 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 app.get('/api/health', async (_req, res) => {
   res.json({
     ok: true,
-    version: '2.0.0',
+    version: '3.0.0',
     youtubeKeyConfigured: Boolean(process.env.YOUTUBE_API_KEY),
     databaseConfigured: hasDatabase(),
     timestamp: new Date().toISOString()
@@ -40,17 +48,40 @@ app.post('/api/discover', async (req, res, next) => {
     const query = String(req.body?.query || '').trim();
     if (!query) return res.status(400).json({ error: 'Entre un mot-clé de recherche.' });
 
+    const mode = req.body?.mode === 'deep' ? 'deep' : 'rapid';
+    const maxResults = Math.min(Math.max(Number(req.body?.maxResults || 50), 1), 200);
+    const minSubscribers = Math.max(Number(req.body?.minSubscribers || 0), 0);
+    const minVideos = Math.max(Number(req.body?.minVideos || 0), 0);
+
+    // V3: les chaînes déjà vérifiées (FR ou étrangères) sont réutilisées pendant 30 jours.
+    const cachedChannels = await getKnownChannels(10000);
     const result = await discoverChannels({
       query,
-      maxResults: req.body?.maxResults || 25
+      mode,
+      maxResults,
+      minSubscribers,
+      minVideos,
+      cachedChannels
     });
 
-    await Promise.all(result.channels.map((channel) => saveChannel(channel)));
+    // On mémorise tous les candidats, y compris ceux hors filtres et les chaînes étrangères.
+    // Les chaînes déjà vérifiées n'auront pas besoin d'une nouvelle analyse linguistique demain.
+    await Promise.all(result.rememberedChannels.map((channel) => saveChannel(channel)));
+
     res.json({
       query,
+      mode: result.mode,
       count: result.channels.length,
+      rawResults: result.rawResults,
+      uniqueCandidates: result.uniqueCandidates,
+      eligibleCandidates: result.eligibleCandidates,
       inspected: result.inspected,
       rejected: result.rejected,
+      filteredByMinimum: result.filteredByMinimum,
+      cacheHits: result.cacheHits,
+      freshChecks: result.freshChecks,
+      searchCalls: result.searchCalls,
+      searchQueries: result.searchQueries,
       channels: result.channels
     });
   } catch (error) {
@@ -65,9 +96,19 @@ app.post('/api/scan', async (req, res, next) => {
     if (!channelId) return res.status(400).json({ error: 'channelId requis.' });
 
     const freshChannel = await getChannel(channelId);
-    const knownChannels = await getChannels();
+    const knownChannels = await getKnownChannels(10000);
     const known = knownChannels.find((channel) => channel.id === channelId);
-    const channel = known ? { ...freshChannel, ...known } : freshChannel;
+    const channel = known
+      ? {
+          ...known,
+          ...freshChannel,
+          isFrench: known.isFrench,
+          frConfidence: known.frConfidence,
+          frReason: known.frReason,
+          lastVerifiedAt: known.lastVerifiedAt,
+          discoveredQuery: known.discoveredQuery
+        }
+      : freshChannel;
 
     const videos = await getUploadedVideos(channel.uploadsPlaylistId, maxVideos);
     const videosWithLinks = videos.map((video) => ({
@@ -188,7 +229,7 @@ async function bootstrap() {
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`YouTube Ecom FR Scanner v2 running on port ${PORT}`);
+    console.log(`YouTube Ecom FR Scanner v3 running on port ${PORT}`);
   });
 }
 

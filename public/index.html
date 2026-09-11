@@ -4,8 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#0b0b0c" />
-  <title>EcomTube Scanner — YouTube FR</title>
-  <meta name="description" content="Découvre les chaînes YouTube francophones e-commerce et analyse les liens présents dans leurs descriptions." />
+  <title>EcomTube Scanner V3 — YouTube FR</title>
+  <meta name="description" content="Découvre en profondeur les chaînes YouTube francophones e-commerce et analyse les liens présents dans leurs descriptions." />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2224%22 fill=%22%230b0b0c%22/><path d=%22M24 28h52v13H40v10h31v12H40v10h37v13H24z%22 fill=%22%23ff6a00%22/></svg>" />
   <link rel="stylesheet" href="/styles.css" />
 </head>
@@ -26,24 +26,76 @@
 
   <main class="page">
     <section class="hero panel">
-      <div class="eyebrow">YOUTUBE E-COMMERCE FRANCOPHONE</div>
-      <h1>Repère les chaînes. <span>Récupère leurs liens.</span></h1>
-      <p>Recherche une niche, élimine les chaînes étrangères puis scanne les descriptions pour détecter outils, sponsors, réseaux et liens d'affiliation.</p>
+      <div class="eyebrow">YOUTUBE E-COMMERCE FRANCOPHONE · V3</div>
+      <h1>Trouve beaucoup plus de chaînes. <span>Récupère leurs liens.</span></h1>
+      <p>La recherche profonde combine plusieurs requêtes YouTube, les résultats chaînes + vidéos, déduplique les créateurs, filtre les étrangers et mémorise les vérifications déjà faites.</p>
 
-      <form id="discoverForm" class="searchbar">
-        <input id="query" type="text" placeholder="Ex. ecommerce, dropshipping, Shopify, Amazon FBA…" value="ecommerce" autocomplete="off" />
-        <select id="maxResults" aria-label="Nombre de chaînes">
-          <option value="10">10 chaînes</option>
-          <option value="25" selected>25 chaînes</option>
-          <option value="50">50 chaînes</option>
-        </select>
-        <button class="button primary" type="submit">Trouver les chaînes FR</button>
+      <form id="discoverForm" class="discover-form">
+        <div class="search-main-row">
+          <input id="query" type="text" placeholder="Ex. ecommerce, dropshipping, Shopify, Amazon FBA…" value="dropshipping" autocomplete="off" />
+          <select id="maxResults" aria-label="Maximum de chaînes FR à afficher">
+            <option value="25">25 FR max</option>
+            <option value="50" selected>50 FR max</option>
+            <option value="100">100 FR max</option>
+            <option value="200">200 FR max</option>
+          </select>
+          <button id="discoverBtn" class="button primary" type="submit">Lancer la recherche</button>
+        </div>
+
+        <div class="search-options-row">
+          <div class="option-group mode-group">
+            <span class="option-label">Mode</span>
+            <div class="mode-switch" role="group" aria-label="Mode de recherche">
+              <button class="mode-btn" type="button" data-mode="rapid">Rapide</button>
+              <button class="mode-btn active" type="button" data-mode="deep">Profonde</button>
+            </div>
+            <input id="searchMode" type="hidden" value="deep" />
+          </div>
+
+          <label class="option-group">
+            <span class="option-label">Abonnés minimum</span>
+            <select id="minSubscribers">
+              <option value="0">Aucun minimum</option>
+              <option value="100">100+</option>
+              <option value="1000" selected>1 000+</option>
+              <option value="5000">5 000+</option>
+              <option value="10000">10 000+</option>
+              <option value="50000">50 000+</option>
+            </select>
+          </label>
+
+          <label class="option-group">
+            <span class="option-label">Vidéos minimum</span>
+            <select id="minVideos">
+              <option value="0">Aucun minimum</option>
+              <option value="5">5+</option>
+              <option value="10" selected>10+</option>
+              <option value="25">25+</option>
+              <option value="50">50+</option>
+              <option value="100">100+</option>
+            </select>
+          </label>
+
+          <div class="deep-hint">
+            <strong>Profonde</strong>
+            <span>8 recherches YouTube · chaînes + vidéos · cache 30 jours</span>
+          </div>
+        </div>
       </form>
-      <p class="quota-note">V2 : chaque candidate est vérifiée avec son pays, sa description et un échantillon de ses dernières vidéos. Les chaînes probablement non francophones sont masquées.</p>
+
+      <div id="searchTelemetry" class="telemetry" hidden>
+        <div><strong id="teleRaw">0</strong><span>résultats YouTube</span></div>
+        <div><strong id="teleUnique">0</strong><span>chaînes uniques</span></div>
+        <div><strong id="teleEligible">0</strong><span>après filtres</span></div>
+        <div><strong id="teleFrench">0</strong><span>FR retenues</span></div>
+        <div><strong id="teleCache">0</strong><span>vérifs réutilisées</span></div>
+      </div>
+
+      <p class="quota-note">Le mode profond coûte plus de recherches YouTube que le mode rapide. Les chaînes déjà vérifiées sont gardées en base et leur analyse linguistique est réutilisée pendant 30 jours.</p>
     </section>
 
     <section class="metrics" id="metrics">
-      <article class="metric"><span>Chaînes FR</span><strong id="statChannels">0</strong><small>en base</small></article>
+      <article class="metric"><span>Chaînes FR</span><strong id="statChannels">0</strong><small>dans la base</small></article>
       <article class="metric"><span>Vidéos</span><strong id="statVideos">0</strong><small>analysées</small></article>
       <article class="metric"><span>Liens</span><strong id="statLinks">0</strong><small>extraits</small></article>
       <article class="metric"><span>Domaines</span><strong id="statDomains">0</strong><small>uniques</small></article>
@@ -57,21 +109,34 @@
             <h2>Chaînes francophones trouvées</h2>
             <div id="discoverMeta" class="muted">Lance une recherche.</div>
           </div>
-          <div class="bulk-actions">
-            <select id="scanAllCount" aria-label="Nombre de vidéos par chaîne">
-              <option value="25">25 vidéos / chaîne</option>
-              <option value="50">50 vidéos / chaîne</option>
-              <option value="100" selected>100 vidéos / chaîne</option>
-              <option value="250">250 vidéos / chaîne</option>
-              <option value="500">500 vidéos / chaîne</option>
-            </select>
-            <button id="scanAllBtn" class="button primary" type="button" disabled>Scanner toutes</button>
+          <div class="result-actions">
+            <label class="sort-control">
+              <span>Trier</span>
+              <select id="channelSort">
+                <option value="relevance">Pertinence</option>
+                <option value="subscribers">Abonnés</option>
+                <option value="videos">Vidéos</option>
+                <option value="confidence">Score FR</option>
+              </select>
+            </label>
+            <div class="bulk-actions">
+              <select id="scanAllCount" aria-label="Nombre de vidéos par chaîne">
+                <option value="25">25 vidéos / chaîne</option>
+                <option value="50">50 vidéos / chaîne</option>
+                <option value="100" selected>100 vidéos / chaîne</option>
+                <option value="250">250 vidéos / chaîne</option>
+                <option value="500">500 vidéos / chaîne</option>
+              </select>
+              <button id="scanAllBtn" class="button primary" type="button" disabled>Scanner toutes</button>
+            </div>
           </div>
         </div>
+
         <div id="bulkProgress" class="bulk-progress" hidden>
           <div class="bulk-progress-top"><span id="bulkProgressText">Préparation…</span><strong id="bulkProgressPct">0%</strong></div>
           <div class="progress-track"><div id="bulkProgressBar" class="progress-bar"></div></div>
         </div>
+
         <div id="channels" class="channel-list empty-state">Aucune chaîne chargée.</div>
       </div>
 

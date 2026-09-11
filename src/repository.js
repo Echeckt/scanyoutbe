@@ -17,6 +17,7 @@ function mapChannelRow(row) {
     customUrl: row.custom_url,
     description: row.description || '',
     country: row.country,
+    defaultLanguage: row.default_language,
     thumbnail: row.thumbnail,
     subscribers: Number(row.subscribers || 0),
     videoCount: Number(row.video_count || 0),
@@ -26,30 +27,60 @@ function mapChannelRow(row) {
     isFrench: row.is_french,
     frConfidence: row.fr_confidence === null || row.fr_confidence === undefined ? null : Number(row.fr_confidence),
     frReason: row.fr_reason || null,
+    discoveryCount: Number(row.discovery_count || 0),
+    firstDiscoveredAt: row.first_discovered_at,
+    lastDiscoveredAt: row.last_discovered_at,
+    lastVerifiedAt: row.last_verified_at,
     lastScannedAt: row.last_scanned_at
   };
 }
 
 export async function saveChannel(channel) {
-  const value = { ...channel, lastScannedAt: channel.lastScannedAt || null };
+  const now = new Date().toISOString();
+  const wasDiscovered = Boolean(channel.discoveredQuery);
+  const value = {
+    ...channel,
+    discoveryCount: Number(channel.discoveryCount || 0) + (wasDiscovered ? 1 : 0),
+    firstDiscoveredAt: channel.firstDiscoveredAt || (wasDiscovered ? now : null),
+    lastDiscoveredAt: wasDiscovered ? now : (channel.lastDiscoveredAt || null),
+    lastVerifiedAt: channel.lastVerifiedAt || null,
+    lastScannedAt: channel.lastScannedAt || null
+  };
 
   if (!hasDatabase()) {
-    memory.channels.set(channel.id, { ...(memory.channels.get(channel.id) || {}), ...value });
-    return value;
+    const existing = memory.channels.get(channel.id) || {};
+    memory.channels.set(channel.id, {
+      ...existing,
+      ...value,
+      discoveryCount: Number(existing.discoveryCount || 0) + (wasDiscovered ? 1 : 0),
+      firstDiscoveredAt: existing.firstDiscoveredAt || value.firstDiscoveredAt,
+      lastDiscoveredAt: wasDiscovered ? now : (existing.lastDiscoveredAt || value.lastDiscoveredAt),
+      lastVerifiedAt: value.lastVerifiedAt || existing.lastVerifiedAt || null
+    });
+    return memory.channels.get(channel.id);
   }
 
   const db = getPool();
   const result = await db.query(`
     INSERT INTO channels (
-      id, title, custom_url, description, country, thumbnail, subscribers,
+      id, title, custom_url, description, country, default_language, thumbnail, subscribers,
       video_count, view_count, uploads_playlist_id, discovered_query,
-      is_french, fr_confidence, fr_reason, updated_at
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,NOW())
+      is_french, fr_confidence, fr_reason, discovery_count,
+      first_discovered_at, last_discovered_at, last_verified_at, updated_at
+    ) VALUES (
+      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,
+      CASE WHEN $12::text IS NULL THEN 0 ELSE 1 END,
+      CASE WHEN $12::text IS NULL THEN NULL ELSE NOW() END,
+      CASE WHEN $12::text IS NULL THEN NULL ELSE NOW() END,
+      $16,
+      NOW()
+    )
     ON CONFLICT (id) DO UPDATE SET
       title = EXCLUDED.title,
       custom_url = EXCLUDED.custom_url,
       description = EXCLUDED.description,
       country = EXCLUDED.country,
+      default_language = EXCLUDED.default_language,
       thumbnail = EXCLUDED.thumbnail,
       subscribers = EXCLUDED.subscribers,
       video_count = EXCLUDED.video_count,
@@ -59,23 +90,58 @@ export async function saveChannel(channel) {
       is_french = COALESCE(EXCLUDED.is_french, channels.is_french),
       fr_confidence = COALESCE(EXCLUDED.fr_confidence, channels.fr_confidence),
       fr_reason = COALESCE(EXCLUDED.fr_reason, channels.fr_reason),
+      discovery_count = channels.discovery_count + CASE WHEN EXCLUDED.discovered_query IS NULL THEN 0 ELSE 1 END,
+      first_discovered_at = COALESCE(channels.first_discovered_at, EXCLUDED.first_discovered_at),
+      last_discovered_at = CASE WHEN EXCLUDED.discovered_query IS NULL THEN channels.last_discovered_at ELSE NOW() END,
+      last_verified_at = COALESCE(EXCLUDED.last_verified_at, channels.last_verified_at),
       updated_at = NOW()
     RETURNING *
   `, [
-    channel.id, channel.title, channel.customUrl, channel.description, channel.country,
-    channel.thumbnail, channel.subscribers, channel.videoCount, channel.viewCount,
-    channel.uploadsPlaylistId, channel.discoveredQuery || null,
-    channel.isFrench ?? null, channel.frConfidence ?? null, channel.frReason || null
+    channel.id,
+    channel.title,
+    channel.customUrl || null,
+    channel.description || '',
+    channel.country || null,
+    channel.defaultLanguage || null,
+    channel.thumbnail || null,
+    Number(channel.subscribers || 0),
+    Number(channel.videoCount || 0),
+    Number(channel.viewCount || 0),
+    channel.uploadsPlaylistId || null,
+    channel.discoveredQuery || null,
+    channel.isFrench ?? null,
+    channel.frConfidence ?? null,
+    channel.frReason || null,
+    channel.lastVerifiedAt || null
   ]);
 
   return mapChannelRow(result.rows[0]);
+}
+
+export async function getChannelsByIds(ids = []) {
+  const uniqueIds = [...new Set(ids.filter(Boolean))];
+  if (!uniqueIds.length) return [];
+
+  if (!hasDatabase()) {
+    return uniqueIds.map((id) => memory.channels.get(id)).filter(Boolean);
+  }
+
+  const result = await getPool().query(
+    'SELECT * FROM channels WHERE id = ANY($1::text[])',
+    [uniqueIds]
+  );
+  return result.rows.map(mapChannelRow);
 }
 
 export async function saveScan(channel, videosWithLinks) {
   const scannedAt = new Date().toISOString();
 
   if (!hasDatabase()) {
-    memory.channels.set(channel.id, { ...(memory.channels.get(channel.id) || {}), ...channel, lastScannedAt: scannedAt });
+    memory.channels.set(channel.id, {
+      ...(memory.channels.get(channel.id) || {}),
+      ...channel,
+      lastScannedAt: scannedAt
+    });
 
     for (const item of videosWithLinks) {
       memory.videos.set(item.video.id, { ...item.video, channelId: channel.id });
@@ -101,14 +167,15 @@ export async function saveScan(channel, videosWithLinks) {
 
     await client.query(`
       INSERT INTO channels (
-        id, title, custom_url, description, country, thumbnail, subscribers,
+        id, title, custom_url, description, country, default_language, thumbnail, subscribers,
         video_count, view_count, uploads_playlist_id, discovered_query, last_scanned_at, updated_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW(),NOW())
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW(),NOW())
       ON CONFLICT (id) DO UPDATE SET
         title = EXCLUDED.title,
         custom_url = EXCLUDED.custom_url,
         description = EXCLUDED.description,
         country = EXCLUDED.country,
+        default_language = EXCLUDED.default_language,
         thumbnail = EXCLUDED.thumbnail,
         subscribers = EXCLUDED.subscribers,
         video_count = EXCLUDED.video_count,
@@ -117,9 +184,18 @@ export async function saveScan(channel, videosWithLinks) {
         last_scanned_at = NOW(),
         updated_at = NOW()
     `, [
-      channel.id, channel.title, channel.customUrl, channel.description, channel.country,
-      channel.thumbnail, channel.subscribers, channel.videoCount, channel.viewCount,
-      channel.uploadsPlaylistId, channel.discoveredQuery || null
+      channel.id,
+      channel.title,
+      channel.customUrl || null,
+      channel.description || '',
+      channel.country || null,
+      channel.defaultLanguage || null,
+      channel.thumbnail || null,
+      Number(channel.subscribers || 0),
+      Number(channel.videoCount || 0),
+      Number(channel.viewCount || 0),
+      channel.uploadsPlaylistId || null,
+      channel.discoveredQuery || null
     ]);
 
     for (const item of videosWithLinks) {
@@ -159,11 +235,26 @@ export async function saveScan(channel, videosWithLinks) {
   }
 }
 
+export async function getKnownChannels(limit = 5000) {
+  const safeLimit = Math.min(Math.max(Number(limit) || 5000, 1), 10000);
+  if (!hasDatabase()) {
+    return [...memory.channels.values()].slice(0, safeLimit);
+  }
+
+  const result = await getPool().query(`
+    SELECT *
+    FROM channels
+    ORDER BY updated_at DESC
+    LIMIT $1
+  `, [safeLimit]);
+  return result.rows.map(mapChannelRow);
+}
+
 export async function getChannels() {
   if (!hasDatabase()) {
     return [...memory.channels.values()]
       .filter((channel) => channel.isFrench === true)
-      .sort((a, b) => new Date(b.lastScannedAt || 0) - new Date(a.lastScannedAt || 0));
+      .sort((a, b) => Number(b.subscribers || 0) - Number(a.subscribers || 0));
   }
 
   const result = await getPool().query(`
@@ -173,8 +264,8 @@ export async function getChannels() {
     LEFT JOIN links l ON l.channel_id = c.id
     WHERE c.is_french IS TRUE
     GROUP BY c.id
-    ORDER BY c.last_scanned_at DESC NULLS LAST, c.updated_at DESC
-    LIMIT 500
+    ORDER BY c.subscribers DESC, c.updated_at DESC
+    LIMIT 1000
   `);
 
   return result.rows.map((row) => ({
@@ -285,6 +376,7 @@ export async function getStats() {
     const links = [...memory.links.values()].filter((l) => frenchIds.has(l.channelId));
     return {
       channels: frenchIds.size,
+      knownChannels: memory.channels.size,
       videos: videos.length,
       links: links.length,
       domains: new Set(links.map((l) => l.domain)).size,
@@ -295,10 +387,19 @@ export async function getStats() {
   const result = await getPool().query(`
     SELECT
       (SELECT COUNT(*)::int FROM channels WHERE is_french IS TRUE) AS channels,
+      (SELECT COUNT(*)::int FROM channels) AS known_channels,
       (SELECT COUNT(*)::int FROM videos v JOIN channels c ON c.id = v.channel_id WHERE c.is_french IS TRUE) AS videos,
       (SELECT COUNT(*)::int FROM links l JOIN channels c ON c.id = l.channel_id WHERE c.is_french IS TRUE) AS links,
       (SELECT COUNT(DISTINCT l.domain)::int FROM links l JOIN channels c ON c.id = l.channel_id WHERE c.is_french IS TRUE) AS domains
   `);
 
-  return { ...result.rows[0], persistent: true };
+  const row = result.rows[0];
+  return {
+    channels: Number(row.channels || 0),
+    knownChannels: Number(row.known_channels || 0),
+    videos: Number(row.videos || 0),
+    links: Number(row.links || 0),
+    domains: Number(row.domains || 0),
+    persistent: true
+  };
 }

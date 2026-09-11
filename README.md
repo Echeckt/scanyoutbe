@@ -1,63 +1,82 @@
-# EcomTube Scanner V2
+# EcomTube Scanner V3
 
-MVP Node.js + PostgreSQL qui permet de :
+Scanner Node.js + PostgreSQL pour trouver les chaînes YouTube francophones autour de niches e-commerce et récupérer les liens présents dans leurs descriptions.
 
-- rechercher des chaînes YouTube autour d'une niche (`ecommerce`, `Shopify`, `dropshipping`, etc.) ;
-- filtrer les faux positifs étrangers avec un score francophone ;
-- analyser le pays déclaré, la description de chaîne et un échantillon des dernières vidéos ;
-- scanner 25 à 500 vidéos par chaîne ;
-- scanner toutes les chaînes trouvées en un clic ;
-- extraire les URLs présentes dans les descriptions ;
-- classer les domaines les plus présents ;
-- estimer si une URL ressemble à un lien d'affiliation ;
-- exporter les résultats en CSV.
+## Nouveautés V3
+
+- mode **Rapide** : 1 recherche YouTube pour tester une niche ;
+- mode **Profonde** : 8 recherches combinées ;
+- recherche à la fois dans les **chaînes** et dans les **vidéos** pour découvrir des créateurs dont le nom de chaîne ne contient pas forcément le mot-clé ;
+- variantes automatiques : requête principale, `France`, `français`, `tutoriel`, `comment faire ...` ;
+- déduplication des chaînes trouvées ;
+- filtre francophone avec pays, langue, description et échantillon des dernières vidéos ;
+- filtre minimum d'abonnés ;
+- filtre minimum de vidéos ;
+- tri par pertinence, abonnés, nombre de vidéos ou score FR ;
+- mémorisation des chaînes FR **et étrangères** ;
+- cache de vérification linguistique pendant 30 jours : une chaîne déjà contrôlée n'est pas réanalysée inutilement ;
+- scan individuel ou **Scanner toutes** ;
+- extraction des URLs et classement des domaines ;
+- export CSV.
 
 ## Déploiement Railway
 
 ### 1. GitHub
 
-Commit tout le contenu de ce dossier à la racine du repo.
+Place tout le contenu de ce dossier à la racine de ton repo puis commit/push.
 
 ### 2. Variables Railway
 
-Dans le service de l'application :
+Dans le service applicatif :
 
 ```env
 YOUTUBE_API_KEY=AIzaSy...
 DATABASE_URL=${{Postgres.DATABASE_URL}}
 ```
 
-`PORT` est injecté automatiquement par Railway.
+Railway injecte automatiquement `PORT`.
 
 ### 3. Google Cloud
 
-Active **YouTube Data API v3**, crée une clé API et limite si possible cette clé à YouTube Data API v3.
+Active **YouTube Data API v3**, crée une clé API et restreins-la à cette API si possible.
 
-Ne commit jamais la clé dans GitHub.
+Ne mets jamais la clé dans GitHub.
 
-## Filtre francophone V2
+## Comment fonctionne la recherche profonde
 
-`regionCode=FR` et `relevanceLanguage=fr` aident à la découverte mais ne prouvent pas qu'une chaîne est française.
+Pour une requête comme `dropshipping`, la V3 lance plusieurs recherches autour de :
 
-La V2 ajoute donc une seconde passe :
+- `dropshipping`
+- `dropshipping france`
+- `dropshipping français`
+- `dropshipping tutoriel`
+- `comment faire dropshipping`
 
-1. pays déclaré de la chaîne ;
-2. langue déclarée lorsqu'elle existe ;
-3. titre + description de la chaîne ;
-4. texte d'un échantillon de ses dernières vidéos ;
-5. comparaison de signaux français avec anglais / espagnol / allemand.
+Certaines recherches ciblent les chaînes, d'autres les vidéos. Pour un résultat vidéo, la V3 récupère le `channelId` du créateur. Tous les IDs sont ensuite dédupliqués.
 
-Seules les chaînes dont la confiance francophone dépasse le seuil sont enregistrées et affichées. Un pays `FR` ou une langue `fr` déclarée est considéré comme un signal fort.
+La V3 récupère ensuite les statistiques des chaînes, applique les minima demandés puis contrôle si elles sont francophones. Les vérifications de moins de 30 jours présentes dans PostgreSQL sont réutilisées.
 
-## Scan global
+## Base existante / migration
 
-Après une recherche, sélectionne le nombre de vidéos puis clique sur **Scanner toutes**.
+Aucune suppression de ta base actuelle n'est nécessaire. Au démarrage, la V3 ajoute automatiquement les colonnes manquantes avec `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`.
 
-Le navigateur lance deux scans simultanés afin de rester raisonnable côté API YouTube et PostgreSQL. La progression est visible directement dans l'interface.
+Les nouvelles colonnes servent notamment à conserver :
 
-## Base existante
+- `default_language`
+- `discovery_count`
+- `first_discovered_at`
+- `last_discovered_at`
+- `last_verified_at`
 
-La migration se fait automatiquement au démarrage avec `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`. Les anciennes chaînes qui n'ont jamais été vérifiées par la V2 ne sont plus comptées comme chaînes FR tant qu'elles ne sont pas redécouvertes et validées.
+## Scan des descriptions
+
+Après une recherche :
+
+1. choisis 25, 50, 100, 250 ou 500 vidéos par chaîne ;
+2. clique sur **Scanner toutes** ;
+3. deux chaînes sont scannées en parallèle ;
+4. les liens sont enregistrés dans PostgreSQL ;
+5. le classement des domaines et la table des liens se mettent à jour.
 
 ## Local
 
@@ -72,7 +91,20 @@ Puis ouvre `http://localhost:3000`.
 ## API
 
 - `GET /api/health`
-- `POST /api/discover` — `{ "query": "ecommerce", "maxResults": 25 }`
+- `POST /api/discover`
+
+Exemple :
+
+```json
+{
+  "query": "dropshipping",
+  "mode": "deep",
+  "maxResults": 50,
+  "minSubscribers": 1000,
+  "minVideos": 10
+}
+```
+
 - `POST /api/scan` — `{ "channelId": "...", "maxVideos": 100 }`
 - `GET /api/channels`
 - `GET /api/links`

@@ -2,11 +2,14 @@ const state = {
   discoveredChannels: [],
   links: [],
   domains: [],
-  bulkScanning: false
+  bulkScanning: false,
+  searchMode: 'deep',
+  sort: 'relevance'
 };
 
 const $ = (selector) => document.querySelector(selector);
 const fmt = new Intl.NumberFormat('fr-FR', { notation: 'compact', maximumFractionDigits: 1 });
+const exactFmt = new Intl.NumberFormat('fr-FR');
 
 function escapeHtml(value = '') {
   return String(value)
@@ -41,7 +44,7 @@ async function loadHealth() {
     const status = $('#apiStatus');
     if (health.youtubeKeyConfigured) {
       status.className = 'status-pill ok';
-      status.innerHTML = `<span></span> API YouTube prête${health.databaseConfigured ? ' · PostgreSQL' : ' · mémoire'} · V2`;
+      status.innerHTML = `<span></span> API YouTube prête${health.databaseConfigured ? ' · PostgreSQL' : ' · mémoire'} · V3`;
     } else {
       status.className = 'status-pill error';
       status.innerHTML = '<span></span> Clé YouTube manquante';
@@ -69,6 +72,22 @@ function confidenceLabel(channel) {
   return `🇫🇷 FR probable ${score}%`;
 }
 
+function getSortedChannels() {
+  const channels = [...state.discoveredChannels];
+  const sort = state.sort;
+
+  if (sort === 'subscribers') {
+    return channels.sort((a, b) => Number(b.subscribers || 0) - Number(a.subscribers || 0));
+  }
+  if (sort === 'videos') {
+    return channels.sort((a, b) => Number(b.videoCount || 0) - Number(a.videoCount || 0));
+  }
+  if (sort === 'confidence') {
+    return channels.sort((a, b) => Number(b.frConfidence || 0) - Number(a.frConfidence || 0));
+  }
+  return channels.sort((a, b) => Number(b.relevanceScore || 0) - Number(a.relevanceScore || 0));
+}
+
 function renderChannels() {
   const container = $('#channels');
   const scanAllBtn = $('#scanAllBtn');
@@ -76,63 +95,101 @@ function renderChannels() {
 
   if (!state.discoveredChannels.length) {
     container.className = 'channel-list empty-state';
-    container.textContent = 'Aucune chaîne francophone trouvée.';
+    container.textContent = 'Aucune chaîne francophone trouvée avec ces filtres.';
     return;
   }
 
+  const channels = getSortedChannels();
   container.className = 'channel-list';
-  container.innerHTML = state.discoveredChannels.map((channel) => `
-    <article class="channel-card" data-channel-card="${escapeHtml(channel.id)}">
-      <img class="avatar" src="${escapeHtml(channel.thumbnail || '')}" alt="" loading="lazy" />
-      <div class="channel-info">
-        <div class="channel-name">${escapeHtml(channel.title)}</div>
-        <div class="channel-meta">
-          <span><strong>${fmt.format(channel.subscribers)}</strong> abonnés</span>
-          <span><strong>${fmt.format(channel.videoCount)}</strong> vidéos</span>
-          <span class="fr-badge" title="${escapeHtml(channel.frReason || '')}">${escapeHtml(confidenceLabel(channel))}</span>
-          <a href="${escapeHtml(channel.youtubeUrl)}" target="_blank" rel="noopener">Ouvrir ↗</a>
+  container.innerHTML = channels.map((channel) => {
+    const queryCount = Number(channel.matchedQueries?.length || 0);
+    const sourceText = channel.discoverySources?.includes('video') && channel.discoverySources?.includes('channel')
+      ? 'chaînes + vidéos'
+      : channel.discoverySources?.includes('video') ? 'via vidéos' : 'via chaînes';
+    const cacheBadge = channel.verificationCached
+      ? '<span class="cache-badge">cache</span>'
+      : '';
+
+    return `
+      <article class="channel-card" data-channel-card="${escapeHtml(channel.id)}">
+        <img class="avatar" src="${escapeHtml(channel.thumbnail || '')}" alt="" loading="lazy" />
+        <div class="channel-info">
+          <div class="channel-name">${escapeHtml(channel.title)}</div>
+          <div class="channel-meta">
+            <span><strong>${fmt.format(channel.subscribers)}</strong> abonnés</span>
+            <span><strong>${fmt.format(channel.videoCount)}</strong> vidéos</span>
+            <span class="fr-badge" title="${escapeHtml(channel.frReason || '')}">${escapeHtml(confidenceLabel(channel))}</span>
+            ${cacheBadge}
+            <span class="discover-badge" title="${escapeHtml((channel.matchedQueries || []).join(' · '))}">${queryCount} req. · ${escapeHtml(sourceText)}</span>
+            <a href="${escapeHtml(channel.youtubeUrl)}" target="_blank" rel="noopener">Ouvrir ↗</a>
+          </div>
         </div>
-      </div>
-      <div class="channel-actions">
-        <select class="scan-select" data-scan-count="${escapeHtml(channel.id)}" aria-label="Nombre de vidéos à scanner">
-          <option value="25">25 vidéos</option>
-          <option value="50">50 vidéos</option>
-          <option value="100" selected>100 vidéos</option>
-          <option value="250">250 vidéos</option>
-          <option value="500">500 vidéos</option>
-        </select>
-        <button class="button primary small scan-btn" data-channel-id="${escapeHtml(channel.id)}">Scanner</button>
-      </div>
-    </article>
-  `).join('');
+        <div class="channel-actions">
+          <select class="scan-select" data-scan-count="${escapeHtml(channel.id)}" aria-label="Nombre de vidéos à scanner">
+            <option value="25">25 vidéos</option>
+            <option value="50">50 vidéos</option>
+            <option value="100" selected>100 vidéos</option>
+            <option value="250">250 vidéos</option>
+            <option value="500">500 vidéos</option>
+          </select>
+          <button class="button primary small scan-btn" data-channel-id="${escapeHtml(channel.id)}">Scanner</button>
+        </div>
+      </article>
+    `;
+  }).join('');
 
   document.querySelectorAll('.scan-btn').forEach((button) => {
     button.addEventListener('click', () => scanChannel(button));
   });
 }
 
+function renderTelemetry(data) {
+  $('#searchTelemetry').hidden = false;
+  $('#teleRaw').textContent = exactFmt.format(Number(data.rawResults || 0));
+  $('#teleUnique').textContent = exactFmt.format(Number(data.uniqueCandidates || 0));
+  $('#teleEligible').textContent = exactFmt.format(Number(data.eligibleCandidates || 0));
+  $('#teleFrench').textContent = exactFmt.format(Number(data.count || 0));
+  $('#teleCache').textContent = exactFmt.format(Number(data.cacheHits || 0));
+}
+
 async function discover(event) {
   event.preventDefault();
   if (state.bulkScanning) return;
 
-  const button = event.currentTarget.querySelector('button[type="submit"]');
+  const button = $('#discoverBtn');
   const query = $('#query').value.trim();
   if (!query) return;
 
   button.disabled = true;
   button.classList.add('loading');
-  button.textContent = 'Analyse FR';
-  $('#discoverMeta').textContent = 'Recherche + vérification linguistique en cours…';
+  button.textContent = state.searchMode === 'deep' ? 'Recherche profonde' : 'Recherche rapide';
+  $('#discoverMeta').textContent = state.searchMode === 'deep'
+    ? 'Plusieurs requêtes YouTube + déduplication + vérification FR…'
+    : 'Recherche rapide + vérification FR…';
 
   try {
     const data = await api('/api/discover', {
       method: 'POST',
-      body: JSON.stringify({ query, maxResults: Number($('#maxResults').value) })
+      body: JSON.stringify({
+        query,
+        mode: state.searchMode,
+        maxResults: Number($('#maxResults').value),
+        minSubscribers: Number($('#minSubscribers').value),
+        minVideos: Number($('#minVideos').value)
+      })
     });
+
     state.discoveredChannels = data.channels;
     renderChannels();
-    $('#discoverMeta').textContent = `${data.count} FR gardée${data.count > 1 ? 's' : ''} · ${data.rejected} étrangère${data.rejected > 1 ? 's' : ''} écartée${data.rejected > 1 ? 's' : ''} · ${data.inspected} vérifiée${data.inspected > 1 ? 's' : ''}`;
-    toast(`${data.count} chaîne${data.count > 1 ? 's' : ''} francophone${data.count > 1 ? 's' : ''} gardée${data.count > 1 ? 's' : ''}.`);
+    renderTelemetry(data);
+
+    const minimumText = Number(data.filteredByMinimum || 0)
+      ? ` · ${data.filteredByMinimum} hors filtres`
+      : '';
+    $('#discoverMeta').textContent = `${data.rawResults} résultats YouTube · ${data.uniqueCandidates} chaînes uniques · ${data.count} FR retenues · ${data.rejected} étrangères${minimumText} · ${data.cacheHits} vérifs cache`;
+
+    const modeLabel = data.mode === 'deep' ? 'Recherche profonde' : 'Recherche rapide';
+    toast(`${modeLabel} terminée : ${data.count} chaîne${data.count > 1 ? 's' : ''} FR trouvée${data.count > 1 ? 's' : ''}.`);
     refreshStats();
   } catch (error) {
     $('#discoverMeta').textContent = 'Échec de la recherche.';
@@ -140,7 +197,7 @@ async function discover(event) {
   } finally {
     button.disabled = false;
     button.classList.remove('loading');
-    button.textContent = 'Trouver les chaînes FR';
+    button.textContent = 'Lancer la recherche';
   }
 }
 
@@ -158,7 +215,10 @@ async function scanChannel(button, forcedMaxVideos = null, silent = false) {
       method: 'POST',
       body: JSON.stringify({ channelId, maxVideos })
     });
-    if (!silent) toast(`${data.channel.title}: ${data.linksFound} liens · ${data.uniqueDomains} domaines.`);
+    if (!silent) {
+      toast(`${data.channel.title}: ${data.scannedVideos} vidéos · ${data.linksFound} liens · ${data.uniqueDomains} domaines.`);
+      await Promise.all([loadLinks(), loadDomains(), refreshStats()]);
+    }
     button.textContent = 'Scanné ✓';
     return data;
   } catch (error) {
@@ -186,9 +246,10 @@ async function scanAllChannels() {
   state.bulkScanning = true;
   const button = $('#scanAllBtn');
   const maxVideos = Number($('#scanAllCount').value || 100);
-  const channels = [...state.discoveredChannels];
+  const channels = getSortedChannels();
   let done = 0;
   let totalLinks = 0;
+  let totalVideos = 0;
   let failures = 0;
   let cursor = 0;
 
@@ -208,16 +269,16 @@ async function scanAllChannels() {
       try {
         const data = await scanChannel(channelButton, maxVideos, true);
         totalLinks += Number(data.linksFound || 0);
+        totalVideos += Number(data.scannedVideos || 0);
       } catch {
         failures += 1;
       }
 
       done += 1;
-      updateBulkProgress(done, channels.length, `${done}/${channels.length} chaînes · ${totalLinks} liens détectés`);
+      updateBulkProgress(done, channels.length, `${done}/${channels.length} chaînes · ${totalVideos} vidéos · ${totalLinks} liens`);
     }
   }
 
-  // Deux scans simultanés : assez rapide sans marteler l'API ni PostgreSQL.
   await Promise.all([worker(), worker()]);
   await Promise.all([loadLinks(), loadDomains(), refreshStats()]);
 
@@ -225,12 +286,12 @@ async function scanAllChannels() {
   button.classList.remove('loading');
   button.textContent = 'Scanner toutes';
   renderChannels();
-  updateBulkProgress(channels.length, channels.length, `${channels.length - failures}/${channels.length} chaînes terminées · ${totalLinks} liens`);
+  updateBulkProgress(channels.length, channels.length, `${channels.length - failures}/${channels.length} chaînes terminées · ${totalVideos} vidéos · ${totalLinks} liens`);
 
   if (failures) {
     toast(`Scan terminé avec ${failures} erreur${failures > 1 ? 's' : ''}. ${totalLinks} liens détectés.`, 'error');
   } else {
-    toast(`Scan terminé : ${channels.length} chaînes · ${totalLinks} liens détectés.`);
+    toast(`Scan terminé : ${channels.length} chaînes · ${totalVideos} vidéos · ${totalLinks} liens.`);
   }
 }
 
@@ -300,9 +361,31 @@ function renderDomains() {
   `).join('');
 }
 
+function setMode(mode) {
+  state.searchMode = mode === 'rapid' ? 'rapid' : 'deep';
+  $('#searchMode').value = state.searchMode;
+  document.querySelectorAll('.mode-btn').forEach((button) => {
+    button.classList.toggle('active', button.dataset.mode === state.searchMode);
+  });
+  const hint = $('.deep-hint');
+  if (state.searchMode === 'deep') {
+    hint.innerHTML = '<strong>Profonde</strong><span>8 recherches YouTube · chaînes + vidéos · cache 30 jours</span>';
+  } else {
+    hint.innerHTML = '<strong>Rapide</strong><span>1 recherche YouTube · idéale pour tester un mot-clé</span>';
+  }
+}
+
 $('#discoverForm').addEventListener('submit', discover);
 $('#scanAllBtn').addEventListener('click', scanAllChannels);
 $('#linkFilter').addEventListener('input', renderLinks);
 $('#categoryFilter').addEventListener('change', renderLinks);
+$('#channelSort').addEventListener('change', (event) => {
+  state.sort = event.target.value;
+  renderChannels();
+});
+document.querySelectorAll('.mode-btn').forEach((button) => {
+  button.addEventListener('click', () => setMode(button.dataset.mode));
+});
 
+setMode('deep');
 await Promise.all([loadHealth(), refreshStats(), loadLinks(), loadDomains()]);
