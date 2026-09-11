@@ -855,6 +855,7 @@ th { background: #0d1218; }
 
   .topbar {
     left: 166px;
+    right: 0;
     height: 56px;
     padding: 7px 8px 7px 4px;
     justify-content: flex-start;
@@ -862,11 +863,13 @@ th { background: #0d1218; }
 
   /* Recherche du header volontairement plus courte */
   .top-search {
-    width: min(100%, 310px);
-    max-width: 310px;
+    width: 100%;
+    max-width: none;
+    min-width: 0;
     min-height: 38px;
     padding: 0 10px;
     border-radius: 10px;
+    margin-left: auto;
   }
   .top-search svg { width: 15px; height: 15px; }
   .top-search span {
@@ -915,7 +918,7 @@ th { background: #0d1218; }
   }
   .search-field input {
     min-width: 0;
-    font-size: 13px;
+    font-size: 12.5px;
   }
   #maxResults,
   #discoverBtn {
@@ -1020,14 +1023,23 @@ th { background: #0d1218; }
 }
 
 @media (max-width: 620px) {
-  /* Plus de place pour la recherche dans le header */
-  .sidebar { width: 142px; }
-  .topbar { left: 142px; }
-  .side-nav .nav-item:nth-child(4),
+  /* Garde 4 icônes à gauche et colle la recherche à droite */
+  .sidebar {
+    width: 176px;
+    padding: 7px 6px 7px 8px;
+  }
+  .topbar {
+    left: 176px;
+    right: 0;
+    padding: 7px 8px 7px 4px;
+  }
+  .side-nav .nav-item:nth-child(4) { display: flex; }
   .side-nav .nav-item:nth-child(5) { display: none; }
   .top-search {
-    width: min(100%, 235px);
-    max-width: 235px;
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    margin-left: auto;
   }
 
   .content {
@@ -1080,15 +1092,38 @@ th { background: #0d1218; }
 }
 
 @media (max-width: 420px) {
-  .sidebar { width: 116px; padding-left: 6px; }
-  .topbar { left: 116px; padding-right: 6px; }
+  .sidebar {
+    width: 150px;
+    padding-left: 6px;
+    gap: 3px;
+  }
+  .brand { margin-right: 2px; }
+  .brand-mark {
+    width: 32px;
+    height: 32px;
+    border-radius: 9px;
+  }
+  .brand-mark svg { width: 17px; height: 17px; }
+  .topbar {
+    left: 150px;
+    right: 0;
+    padding-right: 6px;
+  }
+  .nav-item {
+    flex: 0 0 26px;
+    width: 26px;
+    min-width: 26px;
+    height: 32px;
+    min-height: 32px;
+  }
   .side-nav .nav-item:nth-child(3),
-  .side-nav .nav-item:nth-child(4),
+  .side-nav .nav-item:nth-child(4) { display: flex; }
   .side-nav .nav-item:nth-child(5) { display: none; }
   .top-search {
     width: 100%;
-    max-width: 190px;
+    max-width: none;
     min-height: 36px;
+    padding: 0 9px;
   }
   .top-search span { font-size: 9px; }
 
