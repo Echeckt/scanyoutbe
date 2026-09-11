@@ -328,11 +328,13 @@ export async function discoverChannels({
   mode = 'rapid',
   maxResults = 50,
   minSubscribers = 0,
+  maxSubscribers = 0,
   minVideos = 0,
   cachedChannels = []
 }) {
   const requested = Math.min(Math.max(Number(maxResults) || 50, 1), 200);
   const minSubs = Math.max(Number(minSubscribers) || 0, 0);
+  const maxSubs = Math.max(Number(maxSubscribers) || 0, 0);
   const minVids = Math.max(Number(minVideos) || 0, 0);
   const discoveryMode = mode === 'deep' ? 'deep' : 'rapid';
 
@@ -372,7 +374,7 @@ export async function discoverChannels({
     })
     .sort((a, b) => a.discoveryRank - b.discoveryRank);
 
-  const eligible = enriched.filter((channel) => channel.subscribers >= minSubs && channel.videoCount >= minVids);
+  const eligible = enriched.filter((channel) => channel.subscribers >= minSubs && (!maxSubs || channel.subscribers <= maxSubs) && channel.videoCount >= minVids);
   const filteredByMinimum = enriched.length - eligible.length;
   let cacheHits = 0;
   let freshChecks = 0;

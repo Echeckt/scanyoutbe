@@ -40,7 +40,7 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 app.get('/api/health', async (_req, res) => {
   res.json({
     ok: true,
-    version: '4.0.0',
+    version: '4.1.0',
     youtubeKeyConfigured: Boolean(process.env.YOUTUBE_API_KEY),
     databaseConfigured: hasDatabase(),
     timestamp: new Date().toISOString()
@@ -55,7 +55,11 @@ app.post('/api/discover', async (req, res, next) => {
     const mode = req.body?.mode === 'deep' ? 'deep' : 'rapid';
     const maxResults = Math.min(Math.max(Number(req.body?.maxResults || 50), 1), 200);
     const minSubscribers = Math.max(Number(req.body?.minSubscribers || 0), 0);
+    const maxSubscribers = Math.max(Number(req.body?.maxSubscribers || 0), 0);
     const minVideos = Math.max(Number(req.body?.minVideos || 0), 0);
+    if (maxSubscribers && maxSubscribers < minSubscribers) {
+      return res.status(400).json({ error: 'Le maximum d’abonnés doit être supérieur ou égal au minimum.' });
+    }
 
     // V3: les chaînes déjà vérifiées (FR ou étrangères) sont réutilisées pendant 30 jours.
     const cachedChannels = await getKnownChannels(10000);
@@ -64,6 +68,7 @@ app.post('/api/discover', async (req, res, next) => {
       mode,
       maxResults,
       minSubscribers,
+      maxSubscribers,
       minVideos,
       cachedChannels
     });
@@ -191,7 +196,7 @@ app.get('/api/domain-search', async (req, res, next) => {
   try {
     const domain = normalizeDomainSearch(req.query.domain || req.query.q || '');
     if (!domain || !domain.includes('.')) {
-      return res.status(400).json({ error: 'Entre un nom de domaine valide, par ex. dropified-france.com.' });
+      return res.status(400).json({ error: 'Entre un nom de domaine valide, par ex. ecomstrike.com.' });
     }
 
     const data = await getDomainOccurrences(domain, req.query.limit || 5000);

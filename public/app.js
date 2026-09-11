@@ -6,7 +6,11 @@ const state = {
   searchMode: 'deep',
   sort: 'relevance',
   linkSort: 'views_desc',
-  domainSearchResults: []
+  domainSearchResults: [],
+  currentSearchQuery: '',
+  currentSearchChannelIds: [],
+  linkPage: 1,
+  linkPageSize: 10
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -163,6 +167,13 @@ async function discover(event) {
   const query = $('#query').value.trim();
   if (!query) return;
 
+  const minSubscribers = Number($('#minSubscribers').value || 0);
+  const maxSubscribers = Number($('#maxSubscribers').value || 0);
+  if (maxSubscribers && maxSubscribers < minSubscribers) {
+    toast('Le maximum d’abonnés doit être supérieur ou égal au minimum.', 'error');
+    return;
+  }
+
   button.disabled = true;
   button.classList.add('loading');
   button.textContent = state.searchMode === 'deep' ? 'Recherche profonde' : 'Recherche rapide';
@@ -177,13 +188,15 @@ async function discover(event) {
         query,
         mode: state.searchMode,
         maxResults: Number($('#maxResults').value),
-        minSubscribers: Number($('#minSubscribers').value),
+        minSubscribers,
+        maxSubscribers,
         minVideos: Number($('#minVideos').value)
       })
     });
 
     state.discoveredChannels = data.channels;
     state.currentSearchQuery = query;
+    state.linkPage = 1;
     state.currentSearchChannelIds = data.channels.map((channel) => channel.id);
     $('#exportSearchDomainsBtn').disabled = !state.currentSearchChannelIds.length;
     $('#exportSearchBusinessDomainsBtn').disabled = !state.currentSearchChannelIds.length;
@@ -247,6 +260,23 @@ function updateBulkProgress(done, total, label) {
   $('#bulkProgressBar').style.width = `${pct}%`;
 }
 
+function openScanCompleteModal() {
+  if (!state.currentSearchChannelIds.length) return;
+  const modal = $('#scanCompleteModal');
+  const text = $('#scanCompleteText');
+  if (!modal) return;
+  text.textContent = `Le scan de « ${state.currentSearchQuery || 'cette recherche'} » est terminé. Souhaites-tu télécharger les NDD business détectés, avec un domaine par ligne ?`;
+  modal.hidden = false;
+  document.body.classList.add('modal-open');
+  $('#scanModalYes')?.focus();
+}
+
+function closeScanCompleteModal() {
+  const modal = $('#scanCompleteModal');
+  if (modal) modal.hidden = true;
+  document.body.classList.remove('modal-open');
+}
+
 async function scanAllChannels() {
   if (state.bulkScanning || !state.discoveredChannels.length) return;
 
@@ -300,6 +330,8 @@ async function scanAllChannels() {
   } else {
     toast(`Scan terminé : ${channels.length} chaînes · ${totalVideos} vidéos · ${totalLinks} liens.`);
   }
+
+  openScanCompleteModal();
 }
 
 function formatDate(value) {
@@ -336,6 +368,7 @@ async function searchAllLinksByDomain(query) {
     const data = await api(`/api/domain-search?domain=${encodeURIComponent(value)}&limit=10000`);
     state.globalLinkResults = data.results || [];
     state.globalLinkQuery = data.domain;
+    state.linkPage = 1;
     state.globalLinkSummary = data;
     $('#linkFilter').value = data.domain;
     meta.textContent = `${exactFmt.format(Number(data.total || 0))} occurrence${Number(data.total || 0) > 1 ? 's' : ''} · ${exactFmt.format(Number(data.videos || 0))} vidéo${Number(data.videos || 0) > 1 ? 's' : ''} · ${exactFmt.format(Number(data.channels || 0))} chaîne${Number(data.channels || 0) > 1 ? 's' : ''} · recherche dans toute la base`;
@@ -343,6 +376,7 @@ async function searchAllLinksByDomain(query) {
   } catch (error) {
     state.globalLinkResults = [];
     state.globalLinkQuery = value;
+    state.linkPage = 1;
     state.globalLinkSummary = { total: 0, videos: 0, channels: 0 };
     meta.textContent = 'Erreur pendant la recherche globale.';
     renderLinks();
@@ -356,6 +390,7 @@ function handleLinkFilterInput() {
   const value = $('#linkFilter').value.trim();
 
   if (!value) {
+    state.linkPage = 1;
     state.globalLinkResults = null;
     state.globalLinkQuery = '';
     state.globalLinkSummary = null;
@@ -365,11 +400,13 @@ function handleLinkFilterInput() {
   }
 
   if (looksLikeDomain(value)) {
+    state.linkPage = 1;
     $('#linkSearchMeta').textContent = 'NDD détecté · recherche globale dans 0,5 s…';
     linkSearchTimer = setTimeout(() => searchAllLinksByDomain(value), 500);
     return;
   }
 
+  state.linkPage = 1;
   state.globalLinkResults = null;
   state.globalLinkQuery = '';
   state.globalLinkSummary = null;
@@ -387,6 +424,10 @@ async function loadLinks() {
 
 function renderLinks() {
   const body = $('#linksBody');
+  const pagination = $('#linksPagination');
+  const pageInfo = $('#linksPageInfo');
+  const prevButton = $('#linksPrevPage');
+  const nextButton = $('#linksNextPage');
   const search = $('#linkFilter').value.trim().toLowerCase();
   const category = $('#categoryFilter').value;
   const source = Array.isArray(state.globalLinkResults) ? state.globalLinkResults : state.links;
@@ -414,10 +455,16 @@ function renderLinks() {
   if (!links.length) {
     const global = Array.isArray(state.globalLinkResults);
     body.innerHTML = `<tr><td colspan="8" class="empty-cell">${global && state.globalLinkQuery ? `Aucune occurrence de <strong>${escapeHtml(state.globalLinkQuery)}</strong> dans toute la base scannée.` : 'Aucun lien correspondant.'}</td></tr>`;
+    if (pagination) pagination.hidden = true;
     return;
   }
 
-  body.innerHTML = links.map((link) => `
+  const totalPages = Math.max(1, Math.ceil(links.length / state.linkPageSize));
+  state.linkPage = Math.min(Math.max(state.linkPage, 1), totalPages);
+  const offset = (state.linkPage - 1) * state.linkPageSize;
+  const visibleLinks = links.slice(offset, offset + state.linkPageSize);
+
+  body.innerHTML = visibleLinks.map((link) => `
     <tr>
       <td><span class="truncate" title="${escapeHtml(link.channelTitle)}">${escapeHtml(link.channelTitle)}</span></td>
       <td><a class="truncate" href="${escapeHtml(link.youtubeUrl || `https://www.youtube.com/watch?v=${link.videoId}`)}" target="_blank" rel="noopener" title="${escapeHtml(link.videoTitle)}">${escapeHtml(link.videoTitle)}</a></td>
@@ -429,6 +476,13 @@ function renderLinks() {
       <td><a class="truncate" href="${escapeHtml(link.normalizedUrl || link.url)}" target="_blank" rel="noopener" title="${escapeHtml(link.normalizedUrl || link.url)}">${escapeHtml(link.normalizedUrl || link.url)}</a></td>
     </tr>
   `).join('');
+
+  if (pagination) {
+    pagination.hidden = totalPages <= 1;
+    if (pageInfo) pageInfo.textContent = `Page ${state.linkPage} / ${totalPages} · ${exactFmt.format(links.length)} liens`;
+    if (prevButton) prevButton.disabled = state.linkPage <= 1;
+    if (nextButton) nextButton.disabled = state.linkPage >= totalPages;
+  }
 }
 
 async function loadDomains() {
@@ -475,10 +529,9 @@ async function downloadCurrentSearchDomains(businessOnly) {
   }
 
   const button = businessOnly ? $('#exportSearchBusinessDomainsBtn') : $('#exportSearchDomainsBtn');
-  const original = button.textContent;
   button.disabled = true;
   button.classList.add('loading');
-  button.textContent = 'Préparation';
+  button.setAttribute('aria-busy', 'true');
 
   try {
     const response = await fetch('/api/export-search-domains.txt', {
@@ -515,7 +568,7 @@ async function downloadCurrentSearchDomains(businessOnly) {
   } finally {
     button.disabled = false;
     button.classList.remove('loading');
-    button.textContent = original;
+    button.removeAttribute('aria-busy');
   }
 }
 
@@ -535,12 +588,35 @@ function setMode(mode) {
 
 $('#discoverForm').addEventListener('submit', discover);
 $('#scanAllBtn').addEventListener('click', scanAllChannels);
+$('#linksPrevPage')?.addEventListener('click', () => {
+  if (state.linkPage <= 1) return;
+  state.linkPage -= 1;
+  renderLinks();
+  $('#links')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+$('#linksNextPage')?.addEventListener('click', () => {
+  state.linkPage += 1;
+  renderLinks();
+  $('#links')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+$('#scanModalNo')?.addEventListener('click', closeScanCompleteModal);
+$('#scanModalYes')?.addEventListener('click', async () => {
+  closeScanCompleteModal();
+  await downloadCurrentSearchDomains(true);
+});
+$('#scanCompleteModal')?.addEventListener('click', (event) => {
+  if (event.target.id === 'scanCompleteModal') closeScanCompleteModal();
+});
 $('#exportSearchDomainsBtn').addEventListener('click', () => downloadCurrentSearchDomains(false));
 $('#exportSearchBusinessDomainsBtn').addEventListener('click', () => downloadCurrentSearchDomains(true));
 $('#linkFilter').addEventListener('input', handleLinkFilterInput);
-$('#categoryFilter').addEventListener('change', renderLinks);
+$('#categoryFilter').addEventListener('change', () => {
+  state.linkPage = 1;
+  renderLinks();
+});
 $('#linkSort').addEventListener('change', (event) => {
   state.linkSort = event.target.value;
+  state.linkPage = 1;
   renderLinks();
 });
 $('#channelSort').addEventListener('change', (event) => {
@@ -565,6 +641,10 @@ const focusMainSearch = () => {
 
 $('#topSearchButton')?.addEventListener('click', focusMainSearch);
 document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && !$('#scanCompleteModal')?.hidden) {
+    closeScanCompleteModal();
+    return;
+  }
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
     event.preventDefault();
     focusMainSearch();

@@ -324,3 +324,91 @@ button.export-card { width: 100%; font: inherit; }
   .export-grid { grid-template-columns: 1fr; }
   .footer { flex-direction: column; }
 }
+
+/* V4.1 — filtres avancés, pagination compacte et export post-scan */
+.search-options-row {
+  grid-template-columns: 160px 145px 145px 140px minmax(220px, 1fr);
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px 4px 2px;
+}
+.pagination[hidden] { display: none; }
+.pagination-btn {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid #28313c;
+  border-radius: 9px;
+  background: #0c1117;
+  color: #c8d0da;
+  font: inherit;
+  font-size: 9px;
+  font-weight: 750;
+  cursor: pointer;
+  transition: .16s ease;
+}
+.pagination-btn:hover:not(:disabled) { border-color: rgba(255,116,23,.55); color: #fff; }
+.pagination-btn:disabled { opacity: .35; cursor: not-allowed; }
+.pagination-info { min-width: 150px; color: #7f8997; text-align: center; font-size: 9px; font-weight: 700; }
+
+body.modal-open { overflow: hidden; }
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(3,5,8,.74);
+  backdrop-filter: blur(10px);
+}
+.modal-backdrop[hidden] { display: none; }
+.modal-card {
+  width: min(480px, 100%);
+  padding: 26px;
+  border: 1px solid rgba(255,116,23,.24);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 90% 0%, rgba(255,116,23,.16), transparent 220px),
+    #10151c;
+  box-shadow: 0 30px 90px rgba(0,0,0,.58);
+}
+.modal-icon {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 16px;
+  border: 1px solid rgba(89,222,155,.2);
+  border-radius: 12px;
+  background: rgba(89,222,155,.08);
+  color: #71e5ad;
+  font-size: 19px;
+  font-weight: 900;
+}
+.modal-card h2 { margin: 7px 0 8px; font-size: 21px; letter-spacing: -.03em; }
+.modal-card p { margin: 0; color: #929dab; font-size: 11px; line-height: 1.65; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 22px; }
+
+@media (max-width: 1180px) {
+  .search-options-row { grid-template-columns: repeat(4, 1fr); }
+  .deep-hint { grid-column: 1 / -1; }
+}
+
+@media (max-width: 920px) {
+  .search-options-row { grid-template-columns: 1fr 1fr; }
+  .deep-hint { grid-column: 1 / -1; }
+  .pagination { flex-wrap: wrap; }
+}
+
+@media (max-width: 620px) {
+  .search-options-row { grid-template-columns: 1fr; }
+  .deep-hint { grid-column: auto; }
+  .modal-card { padding: 21px; }
+  .modal-actions { display: grid; grid-template-columns: 1fr; }
+  .modal-actions .button { width: 100%; }
+}
