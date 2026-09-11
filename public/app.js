@@ -53,7 +53,7 @@ async function loadHealth() {
     const status = $('#apiStatus');
     if (health.youtubeKeyConfigured) {
       status.className = 'status-pill ok';
-      status.innerHTML = `<span></span> API YouTube prête${health.databaseConfigured ? ' · PostgreSQL' : ' · mémoire'} · V3.6`;
+      status.innerHTML = `<span></span> API YouTube prête${health.databaseConfigured ? ' · PostgreSQL' : ' · mémoire'} · V3.7`;
     } else {
       status.className = 'status-pill error';
       status.innerHTML = '<span></span> Clé YouTube manquante';
@@ -189,6 +189,10 @@ async function discover(event) {
     });
 
     state.discoveredChannels = data.channels;
+    state.currentSearchQuery = query;
+    state.currentSearchChannelIds = data.channels.map((channel) => channel.id);
+    $('#exportSearchDomainsBtn').disabled = !state.currentSearchChannelIds.length;
+    $('#exportSearchBusinessDomainsBtn').disabled = !state.currentSearchChannelIds.length;
     renderChannels();
     renderTelemetry(data);
 
@@ -470,6 +474,57 @@ function renderDomains() {
   });
 }
 
+async function downloadCurrentSearchDomains(businessOnly) {
+  if (!state.currentSearchChannelIds.length) {
+    toast('Lance d’abord une recherche.', 'error');
+    return;
+  }
+
+  const button = businessOnly ? $('#exportSearchBusinessDomainsBtn') : $('#exportSearchDomainsBtn');
+  const original = button.textContent;
+  button.disabled = true;
+  button.classList.add('loading');
+  button.textContent = 'Préparation';
+
+  try {
+    const response = await fetch('/api/export-search-domains.txt', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query: state.currentSearchQuery,
+        channelIds: state.currentSearchChannelIds,
+        businessOnly
+      })
+    });
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || `Erreur ${response.status}`);
+    }
+
+    const blob = await response.blob();
+    const disposition = response.headers.get('Content-Disposition') || '';
+    const filenameMatch = disposition.match(/filename="?([^";]+)"?/i);
+    const filename = filenameMatch?.[1] || (businessOnly ? 'domaines-business-recherche.txt' : 'domaines-recherche.txt');
+    const count = response.headers.get('X-Domain-Count');
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    toast(`${count || '0'} NDD exportés pour « ${state.currentSearchQuery} ».`);
+  } catch (error) {
+    toast(error.message, 'error');
+  } finally {
+    button.disabled = false;
+    button.classList.remove('loading');
+    button.textContent = original;
+  }
+}
+
 function setMode(mode) {
   state.searchMode = mode === 'rapid' ? 'rapid' : 'deep';
   $('#searchMode').value = state.searchMode;
@@ -486,6 +541,8 @@ function setMode(mode) {
 
 $('#discoverForm').addEventListener('submit', discover);
 $('#scanAllBtn').addEventListener('click', scanAllChannels);
+$('#exportSearchDomainsBtn').addEventListener('click', () => downloadCurrentSearchDomains(false));
+$('#exportSearchBusinessDomainsBtn').addEventListener('click', () => downloadCurrentSearchDomains(true));
 $('#linkFilter').addEventListener('input', handleLinkFilterInput);
 $('#categoryFilter').addEventListener('change', renderLinks);
 $('#linkSort').addEventListener('change', (event) => {

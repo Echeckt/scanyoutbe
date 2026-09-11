@@ -13,6 +13,7 @@ import {
   getKnownChannels,
   getLinks,
   getUniqueLinks,
+  getUniqueLinksByChannelIds,
   getDomainOccurrences,
   updateVideoViewCounts,
   getDomainStats,
@@ -39,7 +40,7 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 app.get('/api/health', async (_req, res) => {
   res.json({
     ok: true,
-    version: '3.6.0',
+    version: '3.7.0',
     youtubeKeyConfigured: Boolean(process.env.YOUTUBE_API_KEY),
     databaseConfigured: hasDatabase(),
     timestamp: new Date().toISOString()
@@ -310,6 +311,39 @@ async function sendDomainTxt(res, { businessOnly, filename }) {
   res.setHeader('X-Domain-Count', String(domains.length));
   res.send(`\uFEFF${domains.join('\n')}${domains.length ? '\n' : ''}`);
 }
+
+
+app.post('/api/export-search-domains.txt', async (req, res, next) => {
+  try {
+    const channelIds = Array.isArray(req.body?.channelIds) ? req.body.channelIds : [];
+    const businessOnly = Boolean(req.body?.businessOnly);
+    const query = String(req.body?.query || 'recherche').trim();
+
+    if (!channelIds.length) {
+      return res.status(400).json({ error: 'Aucune chaîne dans la recherche courante.' });
+    }
+
+    const links = await getUniqueLinksByChannelIds(channelIds, 100000);
+    const domains = uniqueRootDomains(links, { businessOnly });
+    const slug = query
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 60) || 'recherche';
+    const filename = businessOnly
+      ? `${slug}-domaines-business.txt`
+      : `${slug}-domaines-tous.txt`;
+
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('X-Domain-Count', String(domains.length));
+    res.send(`\uFEFF${domains.join('\n')}${domains.length ? '\n' : ''}`);
+  } catch (error) {
+    next(error);
+  }
+});
 
 app.get('/api/export-domains.txt', async (_req, res, next) => {
   try {

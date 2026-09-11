@@ -451,6 +451,126 @@ export async function getUniqueLinks(limit = 100000) {
   }));
 }
 
+
+export async function getUniqueLinksByChannelIds(channelIds = [], limit = 100000) {
+  const ids = [...new Set((Array.isArray(channelIds) ? channelIds : []).map((id) => String(id || '').trim()).filter(Boolean))];
+  const safeLimit = Math.min(Math.max(Number(limit) || 100000, 1), 100000);
+  if (!ids.length) return [];
+
+  if (!hasDatabase()) {
+    const allowedIds = new Set(ids);
+    const frenchIds = new Set(
+      [...memory.channels.values()]
+        .filter((channel) => channel.isFrench === true && allowedIds.has(channel.id))
+        .map((channel) => channel.id)
+    );
+    const groups = new Map();
+
+    for (const link of memory.links.values()) {
+      if (!frenchIds.has(link.channelId)) continue;
+      const key = link.normalizedUrl || link.url;
+      const current = groups.get(key) || {
+        normalizedUrl: key,
+        url: link.url,
+        domain: link.domain,
+        category: link.category,
+        affiliateLikelihood: link.affiliateLikelihood,
+        occurrences: 0,
+        channels: new Set(),
+        videos: new Set(),
+        firstPublishedAt: link.publishedAt || null,
+        lastPublishedAt: link.publishedAt || null,
+        latestChannelTitle: link.channelTitle || '',
+        latestVideoTitle: link.videoTitle || '',
+        latestYoutubeUrl: link.youtubeUrl || ''
+      };
+
+      current.occurrences += 1;
+      current.channels.add(link.channelId);
+      current.videos.add(link.videoId);
+      if (link.affiliateLikelihood === 'high') current.affiliateLikelihood = 'high';
+      else if (link.affiliateLikelihood === 'possible' && current.affiliateLikelihood !== 'high') current.affiliateLikelihood = 'possible';
+
+      const first = current.firstPublishedAt;
+      const last = current.lastPublishedAt;
+      const published = link.publishedAt;
+      if (!first || (published && new Date(published) < new Date(first))) current.firstPublishedAt = published;
+      if (!last || (published && new Date(published) > new Date(last))) {
+        current.lastPublishedAt = published;
+        current.url = link.url;
+        current.latestChannelTitle = link.channelTitle || current.latestChannelTitle;
+        current.latestVideoTitle = link.videoTitle || current.latestVideoTitle;
+        current.latestYoutubeUrl = link.youtubeUrl || current.latestYoutubeUrl;
+      }
+      groups.set(key, current);
+    }
+
+    return [...groups.values()]
+      .map((item) => ({
+        normalizedUrl: item.normalizedUrl,
+        url: item.url,
+        domain: item.domain,
+        category: item.category,
+        affiliateLikelihood: item.affiliateLikelihood,
+        occurrences: item.occurrences,
+        channelsCount: item.channels.size,
+        videosCount: item.videos.size,
+        firstPublishedAt: item.firstPublishedAt,
+        lastPublishedAt: item.lastPublishedAt,
+        latestChannelTitle: item.latestChannelTitle,
+        latestVideoTitle: item.latestVideoTitle,
+        latestYoutubeUrl: item.latestYoutubeUrl
+      }))
+      .sort((a, b) => b.occurrences - a.occurrences || b.channelsCount - a.channelsCount || new Date(b.lastPublishedAt || 0) - new Date(a.lastPublishedAt || 0))
+      .slice(0, safeLimit);
+  }
+
+  const result = await getPool().query(`
+    SELECT
+      l.normalized_url,
+      (ARRAY_AGG(l.url ORDER BY v.published_at DESC NULLS LAST, l.id DESC))[1] AS sample_url,
+      MIN(l.domain) AS domain,
+      MIN(l.category) AS category,
+      CASE
+        WHEN COUNT(*) FILTER (WHERE l.affiliate_likelihood = 'high') > 0 THEN 'high'
+        WHEN COUNT(*) FILTER (WHERE l.affiliate_likelihood = 'possible') > 0 THEN 'possible'
+        ELSE 'low'
+      END AS affiliate_likelihood,
+      COUNT(*)::int AS occurrences,
+      COUNT(DISTINCT l.channel_id)::int AS channels_count,
+      COUNT(DISTINCT l.video_id)::int AS videos_count,
+      MIN(v.published_at) AS first_published_at,
+      MAX(v.published_at) AS last_published_at,
+      (ARRAY_AGG(c.title ORDER BY v.published_at DESC NULLS LAST, l.id DESC))[1] AS latest_channel_title,
+      (ARRAY_AGG(v.title ORDER BY v.published_at DESC NULLS LAST, l.id DESC))[1] AS latest_video_title,
+      (ARRAY_AGG(v.youtube_url ORDER BY v.published_at DESC NULLS LAST, l.id DESC))[1] AS latest_youtube_url
+    FROM links l
+    JOIN videos v ON v.id = l.video_id
+    JOIN channels c ON c.id = l.channel_id
+    WHERE c.is_french IS TRUE
+      AND l.channel_id = ANY($1::text[])
+    GROUP BY l.normalized_url
+    ORDER BY occurrences DESC, channels_count DESC, last_published_at DESC NULLS LAST
+    LIMIT $2
+  `, [ids, safeLimit]);
+
+  return result.rows.map((row) => ({
+    normalizedUrl: row.normalized_url,
+    url: row.sample_url,
+    domain: row.domain,
+    category: row.category,
+    affiliateLikelihood: row.affiliate_likelihood,
+    occurrences: Number(row.occurrences || 0),
+    channelsCount: Number(row.channels_count || 0),
+    videosCount: Number(row.videos_count || 0),
+    firstPublishedAt: row.first_published_at,
+    lastPublishedAt: row.last_published_at,
+    latestChannelTitle: row.latest_channel_title,
+    latestVideoTitle: row.latest_video_title,
+    latestYoutubeUrl: row.latest_youtube_url
+  }));
+}
+
 export async function getDomainOccurrences(domain, limit = 5000) {
   const needle = String(domain || '').trim().toLowerCase().replace(/^www\./, '');
   const safeLimit = Math.min(Math.max(Number(limit) || 5000, 1), 10000);

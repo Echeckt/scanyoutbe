@@ -1,4 +1,4 @@
-# EcomTube Scanner V3.6
+# EcomTube Scanner V3.7
 
 Le champ **Liens détectés** recherche automatiquement un NDD dans toute la base dès qu'un domaine complet est saisi.
 
@@ -140,8 +140,13 @@ Endpoint : `/api/domain-search?domain=dropified-france.com`
 - Les anciennes vidéos sans stats sont hydratées automatiquement lors d’une recherche NDD (cache 24 h).
 
 
-## V3.6 — date de publication des vidéos
+## V3.7 — date de publication des vidéos
 
 - Ajout d'une colonne **Date vidéo** dans le tableau des liens détectés.
 - La date correspond à `publishedAt` retourné par YouTube et est affichée au format `JJ/MM/AAAA`.
 - Fonctionne aussi dans la recherche globale par NDD.
+
+
+## V3.7 — exports NDD par recherche
+
+Les boutons **NDD tous · recherche** et **NDD business · recherche** exportent uniquement les domaines associés aux chaînes retournées par la dernière recherche affichée, au lieu de toute la base cumulative. Chaque fichier contient exactement un nom de domaine racine par ligne.
