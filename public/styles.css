@@ -356,3 +356,86 @@ td a:hover { color: var(--orange); }
 @media (max-width: 1180px) {
   .top-actions .button { padding: 9px 11px; font-size: 11px; }
 }
+
+
+/* V3.3 — recherche d'un domaine dans toute la base */
+.domain-finder-panel { margin-top: 14px; padding: 20px; }
+.domain-finder-head { align-items: flex-end; }
+.domain-finder-head .muted { margin-top: 7px; max-width: 720px; }
+.domain-search-form {
+  display: grid;
+  grid-template-columns: minmax(260px, 420px) auto;
+  gap: 8px;
+  width: min(100%, 560px);
+}
+.domain-search-form input { min-width: 0; }
+.domain-search-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 13px;
+}
+.domain-search-summary strong {
+  color: var(--orange);
+  font-size: 14px;
+  margin-right: 5px;
+}
+.domain-search-summary span {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 8px;
+  border-radius: 999px;
+  border: 1px solid #2a2a2e;
+  background: #0b0b0d;
+  color: #a5a5ad;
+  font-size: 10px;
+  font-weight: 800;
+}
+.domain-search-results { display: grid; gap: 8px; }
+.domain-hit {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 13px;
+  border: 1px solid #252529;
+  border-radius: 13px;
+  background: #0c0c0e;
+}
+.domain-hit:hover { border-color: #39393e; }
+.domain-hit-main { min-width: 0; }
+.domain-hit-channel { color: var(--orange); font-size: 10px; font-weight: 850; text-transform: uppercase; letter-spacing: .04em; }
+.domain-hit-video {
+  display: block;
+  margin-top: 4px;
+  color: #ededf0;
+  font-size: 13px;
+  font-weight: 800;
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.domain-hit-video:hover { color: var(--orange); }
+.domain-hit-meta { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 6px; color: #73737b; font-size: 10px; }
+.domain-hit-actions { display: flex; gap: 7px; align-items: center; }
+.domain-quick-search {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+.domain-quick-search:hover { color: var(--orange); }
+
+@media (max-width: 900px) {
+  .domain-finder-head { align-items: stretch; }
+  .domain-search-form { grid-template-columns: 1fr; width: 100%; }
+  .domain-hit { grid-template-columns: 1fr; }
+  .domain-hit-actions { justify-content: flex-start; flex-wrap: wrap; }
+}

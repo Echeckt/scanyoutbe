@@ -437,6 +437,86 @@ export async function getUniqueLinks(limit = 100000) {
   }));
 }
 
+export async function getDomainOccurrences(domain, limit = 5000) {
+  const needle = String(domain || '').trim().toLowerCase().replace(/^www\./, '');
+  const safeLimit = Math.min(Math.max(Number(limit) || 5000, 1), 10000);
+  if (!needle) return { total: 0, videos: 0, channels: 0, results: [] };
+
+  if (!hasDatabase()) {
+    const frenchIds = new Set(
+      [...memory.channels.values()]
+        .filter((channel) => channel.isFrench === true)
+        .map((channel) => channel.id)
+    );
+
+    const results = [...memory.links.values()]
+      .filter((link) => frenchIds.has(link.channelId))
+      .filter((link) => {
+        const value = String(link.domain || '').toLowerCase().replace(/^www\./, '');
+        return value === needle || value.endsWith(`.${needle}`);
+      })
+      .sort((a, b) => new Date(b.publishedAt || 0) - new Date(a.publishedAt || 0));
+
+    const all = results;
+    return {
+      total: all.length,
+      videos: new Set(all.map((item) => item.videoId)).size,
+      channels: new Set(all.map((item) => item.channelId)).size,
+      results: all.slice(0, safeLimit)
+    };
+  }
+
+  const db = getPool();
+  const matchSql = `(LOWER(REGEXP_REPLACE(l.domain, '^www\\.', '')) = $1 OR LOWER(REGEXP_REPLACE(l.domain, '^www\\.', '')) LIKE ('%.' || $1))`;
+
+  const [summaryResult, rowsResult] = await Promise.all([
+    db.query(`
+      SELECT
+        COUNT(*)::int AS total,
+        COUNT(DISTINCT l.video_id)::int AS videos,
+        COUNT(DISTINCT l.channel_id)::int AS channels
+      FROM links l
+      JOIN channels c ON c.id = l.channel_id
+      WHERE c.is_french IS TRUE
+        AND ${matchSql}
+    `, [needle]),
+    db.query(`
+      SELECT
+        l.id, l.video_id, l.channel_id, l.url, l.normalized_url, l.domain, l.category,
+        l.affiliate_likelihood, v.title AS video_title, v.published_at, v.youtube_url,
+        c.title AS channel_title
+      FROM links l
+      JOIN videos v ON v.id = l.video_id
+      JOIN channels c ON c.id = l.channel_id
+      WHERE c.is_french IS TRUE
+        AND ${matchSql}
+      ORDER BY v.published_at DESC NULLS LAST, l.id DESC
+      LIMIT $2
+    `, [needle, safeLimit])
+  ]);
+
+  const summary = summaryResult.rows[0] || {};
+  return {
+    total: Number(summary.total || 0),
+    videos: Number(summary.videos || 0),
+    channels: Number(summary.channels || 0),
+    results: rowsResult.rows.map((row) => ({
+      id: row.id,
+      videoId: row.video_id,
+      channelId: row.channel_id,
+      url: row.url,
+      normalizedUrl: row.normalized_url,
+      domain: row.domain,
+      category: row.category,
+      affiliateLikelihood: row.affiliate_likelihood,
+      videoTitle: row.video_title,
+      publishedAt: row.published_at,
+      youtubeUrl: row.youtube_url,
+      channelTitle: row.channel_title
+    }))
+  };
+}
+
 export async function getDomainStats(limit = 100) {
   const safeLimit = Math.min(Math.max(Number(limit) || 100, 1), 500);
 

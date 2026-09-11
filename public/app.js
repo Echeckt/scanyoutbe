@@ -4,7 +4,8 @@ const state = {
   domains: [],
   bulkScanning: false,
   searchMode: 'deep',
-  sort: 'relevance'
+  sort: 'relevance',
+  domainSearchResults: []
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -44,7 +45,7 @@ async function loadHealth() {
     const status = $('#apiStatus');
     if (health.youtubeKeyConfigured) {
       status.className = 'status-pill ok';
-      status.innerHTML = `<span></span> API YouTube prête${health.databaseConfigured ? ' · PostgreSQL' : ' · mémoire'} · V3.2`;
+      status.innerHTML = `<span></span> API YouTube prête${health.databaseConfigured ? ' · PostgreSQL' : ' · mémoire'} · V3.4`;
     } else {
       status.className = 'status-pill error';
       status.innerHTML = '<span></span> Clé YouTube manquante';
@@ -295,6 +296,81 @@ async function scanAllChannels() {
   }
 }
 
+function formatDate(value) {
+  if (!value) return '—';
+  try {
+    return new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(value));
+  } catch {
+    return String(value);
+  }
+}
+
+function looksLikeDomain(value = '') {
+  const raw = String(value).trim().toLowerCase();
+  if (!raw || raw.includes(' ')) return false;
+  const cleaned = raw.replace(/^https?:\/\//, '').split('/')[0].split(':')[0].replace(/^www\./, '');
+  return /^[a-z0-9](?:[a-z0-9-]{0,62}\.)+[a-z]{2,63}$/i.test(cleaned);
+}
+
+async function searchAllLinksByDomain(query) {
+  const value = String(query || '').trim();
+  if (!looksLikeDomain(value)) {
+    state.globalLinkResults = null;
+    state.globalLinkQuery = '';
+    state.globalLinkSummary = null;
+    $('#linkSearchMeta').textContent = 'Filtre local sur les 1 000 derniers liens · entre un NDD complet pour chercher dans toute la base.';
+    renderLinks();
+    return;
+  }
+
+  const meta = $('#linkSearchMeta');
+  meta.textContent = `Recherche globale de ${value} dans toute la base…`;
+
+  try {
+    const data = await api(`/api/domain-search?domain=${encodeURIComponent(value)}&limit=10000`);
+    state.globalLinkResults = data.results || [];
+    state.globalLinkQuery = data.domain;
+    state.globalLinkSummary = data;
+    $('#linkFilter').value = data.domain;
+    meta.textContent = `${exactFmt.format(Number(data.total || 0))} occurrence${Number(data.total || 0) > 1 ? 's' : ''} · ${exactFmt.format(Number(data.videos || 0))} vidéo${Number(data.videos || 0) > 1 ? 's' : ''} · ${exactFmt.format(Number(data.channels || 0))} chaîne${Number(data.channels || 0) > 1 ? 's' : ''} · recherche dans toute la base`;
+    renderLinks();
+  } catch (error) {
+    state.globalLinkResults = [];
+    state.globalLinkQuery = value;
+    state.globalLinkSummary = { total: 0, videos: 0, channels: 0 };
+    meta.textContent = 'Erreur pendant la recherche globale.';
+    renderLinks();
+    toast(error.message, 'error');
+  }
+}
+
+let linkSearchTimer = null;
+function handleLinkFilterInput() {
+  clearTimeout(linkSearchTimer);
+  const value = $('#linkFilter').value.trim();
+
+  if (!value) {
+    state.globalLinkResults = null;
+    state.globalLinkQuery = '';
+    state.globalLinkSummary = null;
+    $('#linkSearchMeta').textContent = 'Tape un NDD complet pour chercher dans toute la base.';
+    renderLinks();
+    return;
+  }
+
+  if (looksLikeDomain(value)) {
+    $('#linkSearchMeta').textContent = 'NDD détecté · recherche globale dans 0,5 s…';
+    linkSearchTimer = setTimeout(() => searchAllLinksByDomain(value), 500);
+    return;
+  }
+
+  state.globalLinkResults = null;
+  state.globalLinkQuery = '';
+  state.globalLinkSummary = null;
+  $('#linkSearchMeta').textContent = 'Filtre local sur les 1 000 derniers liens · entre un NDD complet pour chercher dans toute la base.';
+  renderLinks();
+}
+
 async function loadLinks() {
   try {
     const data = await api('/api/links?limit=1000');
@@ -307,16 +383,19 @@ function renderLinks() {
   const body = $('#linksBody');
   const search = $('#linkFilter').value.trim().toLowerCase();
   const category = $('#categoryFilter').value;
+  const source = Array.isArray(state.globalLinkResults) ? state.globalLinkResults : state.links;
 
-  const links = state.links.filter((link) => {
+  const links = source.filter((link) => {
     if (category && link.category !== category) return false;
+    if (Array.isArray(state.globalLinkResults)) return true;
     if (!search) return true;
     return [link.channelTitle, link.videoTitle, link.domain, link.normalizedUrl]
       .some((value) => String(value || '').toLowerCase().includes(search));
   });
 
   if (!links.length) {
-    body.innerHTML = '<tr><td colspan="6" class="empty-cell">Aucun lien correspondant.</td></tr>';
+    const global = Array.isArray(state.globalLinkResults);
+    body.innerHTML = `<tr><td colspan="6" class="empty-cell">${global && state.globalLinkQuery ? `Aucune occurrence de <strong>${escapeHtml(state.globalLinkQuery)}</strong> dans toute la base scannée.` : 'Aucun lien correspondant.'}</td></tr>`;
     return;
   }
 
@@ -327,7 +406,7 @@ function renderLinks() {
       <td><strong>${escapeHtml(link.domain)}</strong></td>
       <td><span class="badge">${escapeHtml(link.category)}</span></td>
       <td><span class="badge ${escapeHtml(link.affiliateLikelihood)}">${escapeHtml(link.affiliateLikelihood)}</span></td>
-      <td><a class="truncate" href="${escapeHtml(link.normalizedUrl)}" target="_blank" rel="noopener" title="${escapeHtml(link.normalizedUrl)}">${escapeHtml(link.normalizedUrl)}</a></td>
+      <td><a class="truncate" href="${escapeHtml(link.normalizedUrl || link.url)}" target="_blank" rel="noopener" title="${escapeHtml(link.normalizedUrl || link.url)}">${escapeHtml(link.normalizedUrl || link.url)}</a></td>
     </tr>
   `).join('');
 }
@@ -353,12 +432,20 @@ function renderDomains() {
     <div class="domain-row">
       <div class="domain-rank">${index + 1}</div>
       <div>
-        <div class="domain-name">${escapeHtml(domain.domain)}</div>
+        <button class="domain-name domain-quick-search" type="button" data-domain-search="${escapeHtml(domain.domain)}" title="Rechercher ce domaine dans toute la base">${escapeHtml(domain.domain)}</button>
         <div class="domain-sub">${domain.links} liens · ${domain.videos} vidéos</div>
       </div>
       <div class="domain-count">${domain.channels} ch.</div>
     </div>
   `).join('');
+
+  container.querySelectorAll('[data-domain-search]').forEach((button) => {
+    button.addEventListener('click', () => {
+      $('#linkFilter').value = button.dataset.domainSearch || '';
+      searchAllLinksByDomain(button.dataset.domainSearch || '');
+      $('.links-panel').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  });
 }
 
 function setMode(mode) {
@@ -377,7 +464,7 @@ function setMode(mode) {
 
 $('#discoverForm').addEventListener('submit', discover);
 $('#scanAllBtn').addEventListener('click', scanAllChannels);
-$('#linkFilter').addEventListener('input', renderLinks);
+$('#linkFilter').addEventListener('input', handleLinkFilterInput);
 $('#categoryFilter').addEventListener('change', renderLinks);
 $('#channelSort').addEventListener('change', (event) => {
   state.sort = event.target.value;

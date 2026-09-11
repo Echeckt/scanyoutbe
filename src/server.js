@@ -13,6 +13,7 @@ import {
   getKnownChannels,
   getLinks,
   getUniqueLinks,
+  getDomainOccurrences,
   getDomainStats,
   getStats
 } from './repository.js';
@@ -37,7 +38,7 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 app.get('/api/health', async (_req, res) => {
   res.json({
     ok: true,
-    version: '3.2.0',
+    version: '3.4.0',
     youtubeKeyConfigured: Boolean(process.env.YOUTUBE_API_KEY),
     databaseConfigured: hasDatabase(),
     timestamp: new Date().toISOString()
@@ -161,6 +162,38 @@ app.get('/api/links', async (req, res, next) => {
         limit: req.query.limit || 1000
       })
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+function normalizeDomainSearch(value = '') {
+  let raw = String(value || '').trim().toLowerCase();
+  if (!raw) return '';
+  raw = raw.replace(/^\*\./, '');
+
+  try {
+    const url = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`);
+    return url.hostname.replace(/^www\./, '').replace(/\.$/, '');
+  } catch {
+    return raw
+      .replace(/^https?:\/\//, '')
+      .split('/')[0]
+      .split(':')[0]
+      .replace(/^www\./, '')
+      .replace(/\.$/, '');
+  }
+}
+
+app.get('/api/domain-search', async (req, res, next) => {
+  try {
+    const domain = normalizeDomainSearch(req.query.domain || req.query.q || '');
+    if (!domain || !domain.includes('.')) {
+      return res.status(400).json({ error: 'Entre un nom de domaine valide, par ex. dropified-france.com.' });
+    }
+
+    const data = await getDomainOccurrences(domain, req.query.limit || 5000);
+    res.json({ domain, ...data });
   } catch (error) {
     next(error);
   }

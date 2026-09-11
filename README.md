@@ -1,3 +1,7 @@
+# EcomTube Scanner V3.4
+
+Le champ **Liens détectés** recherche automatiquement un NDD dans toute la base dès qu'un domaine complet est saisi.
+
 # EcomTube Scanner V3.1
 
 Scanner Node.js + PostgreSQL pour trouver les chaînes YouTube francophones autour de niches e-commerce et récupérer les liens présents dans leurs descriptions.
@@ -119,3 +123,10 @@ Exemple :
 - `/api/export-business-domains.txt` : domaines business uniquement (réseaux sociaux, YouTube, messageries et raccourcisseurs écartés), un par ligne.
 
 Les sous-domaines sont ramenés au domaine enregistrable : `app.minea.com` devient `minea.com`, `shopify.pxf.io` devient `pxf.io`.
+
+
+## Recherche NDD V3.3
+
+Une recherche globale permet de saisir un domaine (ex. `dropified-france.com`) et de retrouver toutes ses occurrences dans l'ensemble des liens scannés, avec la chaîne, la vidéo, la date, l'URL détectée et un lien direct vers la vidéo YouTube.
+
+Endpoint : `/api/domain-search?domain=dropified-france.com`
