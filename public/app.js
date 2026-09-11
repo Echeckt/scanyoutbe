@@ -119,25 +119,29 @@ function renderChannels() {
 
     return `
       <article class="channel-card" data-channel-card="${escapeHtml(channel.id)}">
-        <img class="avatar" src="${escapeHtml(channel.thumbnail || '')}" alt="" loading="lazy" />
-        <div class="channel-info">
-          <div class="channel-name">${escapeHtml(channel.title)}</div>
-          <div class="channel-meta">
-            <span><strong>${fmt.format(channel.subscribers)}</strong> abonnés</span>
-            <span><strong>${fmt.format(channel.videoCount)}</strong> vidéos</span>
-            <span class="fr-badge" title="${escapeHtml(channel.frReason || '')}">${escapeHtml(confidenceLabel(channel))}</span>
-            ${cacheBadge}
-            <span class="discover-badge" title="${escapeHtml((channel.matchedQueries || []).join(' · '))}">${queryCount} req. · ${escapeHtml(sourceText)}</span>
-            <a href="${escapeHtml(channel.youtubeUrl)}" target="_blank" rel="noopener">Ouvrir ↗</a>
+        <div class="channel-primary">
+          <img class="avatar" src="${escapeHtml(channel.thumbnail || '')}" alt="" loading="lazy" />
+          <div class="channel-info">
+            <div class="channel-name-row">
+              <div class="channel-name">${escapeHtml(channel.title)}</div>
+              <a class="channel-open" href="${escapeHtml(channel.youtubeUrl)}" target="_blank" rel="noopener" aria-label="Ouvrir ${escapeHtml(channel.title)} sur YouTube">↗</a>
+            </div>
+            <div class="channel-source-meta">
+              ${cacheBadge}
+              <span class="discover-badge" title="${escapeHtml((channel.matchedQueries || []).join(' · '))}">${queryCount} req. · ${escapeHtml(sourceText)}</span>
+            </div>
           </div>
         </div>
+        <div class="channel-stat"><strong>${fmt.format(channel.subscribers)}</strong><span>abonnés</span></div>
+        <div class="channel-stat"><strong>${fmt.format(channel.videoCount)}</strong><span>vidéos</span></div>
+        <div class="channel-score"><span class="fr-badge" title="${escapeHtml(channel.frReason || '')}">${escapeHtml(confidenceLabel(channel))}</span></div>
         <div class="channel-actions">
           <select class="scan-select" data-scan-count="${escapeHtml(channel.id)}" aria-label="Nombre de vidéos à scanner">
-            <option value="25">25 vidéos</option>
-            <option value="50">50 vidéos</option>
+            <option value="25">25</option>
+            <option value="50">50</option>
             <option value="100" selected>100 vidéos</option>
-            <option value="250">250 vidéos</option>
-            <option value="500">500 vidéos</option>
+            <option value="250">250</option>
+            <option value="500">500</option>
           </select>
           <button class="button primary small scan-btn" data-channel-id="${escapeHtml(channel.id)}">Scanner</button>
         </div>
