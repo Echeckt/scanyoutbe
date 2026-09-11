@@ -40,7 +40,7 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 app.get('/api/health', async (_req, res) => {
   res.json({
     ok: true,
-    version: '3.7.0',
+    version: '4.0.0',
     youtubeKeyConfigured: Boolean(process.env.YOUTUBE_API_KEY),
     databaseConfigured: hasDatabase(),
     timestamp: new Date().toISOString()
@@ -459,7 +459,7 @@ async function bootstrap() {
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`YouTube Ecom FR Scanner v3.2 running on port ${PORT}`);
+    console.log(`ScanYTB v4 running on port ${PORT}`);
   });
 }
 

@@ -50,17 +50,11 @@ async function api(path, options = {}) {
 async function loadHealth() {
   try {
     const health = await api('/api/health');
-    const status = $('#apiStatus');
-    if (health.youtubeKeyConfigured) {
-      status.className = 'status-pill ok';
-      status.innerHTML = `<span></span> API YouTube prête${health.databaseConfigured ? ' · PostgreSQL' : ' · mémoire'} · V3.7`;
-    } else {
-      status.className = 'status-pill error';
-      status.innerHTML = '<span></span> Clé YouTube manquante';
+    if (!health.youtubeKeyConfigured) {
+      toast('Le service YouTube est momentanément indisponible.', 'error');
     }
   } catch {
-    $('#apiStatus').className = 'status-pill error';
-    $('#apiStatus').innerHTML = '<span></span> API indisponible';
+    // Le statut technique reste volontairement invisible dans l’interface publique.
   }
 }
 
@@ -555,6 +549,33 @@ $('#channelSort').addEventListener('change', (event) => {
 });
 document.querySelectorAll('.mode-btn').forEach((button) => {
   button.addEventListener('click', () => setMode(button.dataset.mode));
+});
+
+document.querySelectorAll('[data-query-example]').forEach((button) => {
+  button.addEventListener('click', () => {
+    $('#query').value = button.dataset.queryExample || '';
+    $('#query').focus();
+  });
+});
+
+const focusMainSearch = () => {
+  document.querySelector('#home')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  window.setTimeout(() => $('#query')?.focus(), 250);
+};
+
+$('#topSearchButton')?.addEventListener('click', focusMainSearch);
+document.addEventListener('keydown', (event) => {
+  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+    event.preventDefault();
+    focusMainSearch();
+  }
+});
+
+document.querySelectorAll('.nav-item').forEach((item) => {
+  item.addEventListener('click', () => {
+    document.querySelectorAll('.nav-item').forEach((nav) => nav.classList.remove('active'));
+    item.classList.add('active');
+  });
 });
 
 setMode('deep');

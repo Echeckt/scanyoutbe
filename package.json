@@ -1,8 +1,8 @@
 {
-  "name": "youtube-ecom-fr-scanner",
-  "version": "3.7.0",
+  "name": "scan-ytb",
+  "version": "4.0.0",
   "private": true,
-  "description": "Deep discovery of French-speaking ecommerce YouTube channels with CSV exports and one-domain-per-line TXT exports.",
+  "description": "ScanYTB — analyse les chaînes YouTube françaises et extrait liens, outils, sponsors, affiliations et noms de domaine.",
   "type": "module",
   "engines": {
     "node": ">=20"
