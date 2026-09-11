@@ -28,6 +28,7 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 app.get('/api/health', async (_req, res) => {
   res.json({
     ok: true,
+    version: '2.0.0',
     youtubeKeyConfigured: Boolean(process.env.YOUTUBE_API_KEY),
     databaseConfigured: hasDatabase(),
     timestamp: new Date().toISOString()
@@ -39,13 +40,19 @@ app.post('/api/discover', async (req, res, next) => {
     const query = String(req.body?.query || '').trim();
     if (!query) return res.status(400).json({ error: 'Entre un mot-clé de recherche.' });
 
-    const channels = await discoverChannels({
+    const result = await discoverChannels({
       query,
       maxResults: req.body?.maxResults || 25
     });
 
-    await Promise.all(channels.map((channel) => saveChannel(channel)));
-    res.json({ query, count: channels.length, channels });
+    await Promise.all(result.channels.map((channel) => saveChannel(channel)));
+    res.json({
+      query,
+      count: result.channels.length,
+      inspected: result.inspected,
+      rejected: result.rejected,
+      channels: result.channels
+    });
   } catch (error) {
     next(error);
   }
@@ -57,9 +64,12 @@ app.post('/api/scan', async (req, res, next) => {
     const maxVideos = Math.min(Math.max(Number(req.body?.maxVideos || 100), 1), 1000);
     if (!channelId) return res.status(400).json({ error: 'channelId requis.' });
 
-    const channel = await getChannel(channelId);
-    const videos = await getUploadedVideos(channel.uploadsPlaylistId, maxVideos);
+    const freshChannel = await getChannel(channelId);
+    const knownChannels = await getChannels();
+    const known = knownChannels.find((channel) => channel.id === channelId);
+    const channel = known ? { ...freshChannel, ...known } : freshChannel;
 
+    const videos = await getUploadedVideos(channel.uploadsPlaylistId, maxVideos);
     const videosWithLinks = videos.map((video) => ({
       video,
       links: extractLinks(video.description)
@@ -147,7 +157,7 @@ app.get('/api/export.csv', async (_req, res, next) => {
     ].map(escapeCsv).join(','));
 
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', 'attachment; filename="youtube-ecom-links.csv"');
+    res.setHeader('Content-Disposition', 'attachment; filename="youtube-ecom-fr-links.csv"');
     res.send(`\uFEFF${headers.join(',')}\n${rows.join('\n')}`);
   } catch (error) {
     next(error);
@@ -178,7 +188,7 @@ async function bootstrap() {
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`YouTube Ecom FR Scanner running on port ${PORT}`);
+    console.log(`YouTube Ecom FR Scanner v2 running on port ${PORT}`);
   });
 }
 

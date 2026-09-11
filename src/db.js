@@ -35,6 +35,9 @@ export async function initDatabase() {
       view_count BIGINT DEFAULT 0,
       uploads_playlist_id TEXT,
       discovered_query TEXT,
+      is_french BOOLEAN,
+      fr_confidence INTEGER,
+      fr_reason TEXT,
       last_scanned_at TIMESTAMPTZ,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -65,10 +68,15 @@ export async function initDatabase() {
       UNIQUE(video_id, normalized_url)
     );
 
+    ALTER TABLE channels ADD COLUMN IF NOT EXISTS is_french BOOLEAN;
+    ALTER TABLE channels ADD COLUMN IF NOT EXISTS fr_confidence INTEGER;
+    ALTER TABLE channels ADD COLUMN IF NOT EXISTS fr_reason TEXT;
+
     CREATE INDEX IF NOT EXISTS idx_links_channel_id ON links(channel_id);
     CREATE INDEX IF NOT EXISTS idx_links_domain ON links(domain);
     CREATE INDEX IF NOT EXISTS idx_videos_channel_id ON videos(channel_id);
     CREATE INDEX IF NOT EXISTS idx_channels_last_scanned_at ON channels(last_scanned_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_channels_is_french ON channels(is_french);
   `);
 
   return true;

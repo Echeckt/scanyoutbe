@@ -194,3 +194,33 @@ td a:hover { color: var(--orange); }
   .avatar { width: 44px; height: 44px; }
   .channel-actions { grid-column: 1 / -1; justify-content: flex-end; }
 }
+
+/* V2 — filtre FR + scan global */
+.channels-head { align-items: flex-end; }
+.channels-head .muted { margin-top: 7px; }
+.bulk-actions { display: flex; align-items: center; gap: 8px; }
+.bulk-actions select { width: 168px; padding: 10px 11px; font-size: 11px; }
+.fr-badge {
+  color: #9ce9bd;
+  background: rgba(49,208,124,.08);
+  border: 1px solid rgba(49,208,124,.15);
+  border-radius: 999px;
+  padding: 2px 7px;
+}
+.bulk-progress {
+  margin: -2px 0 14px;
+  padding: 11px 12px;
+  border: 1px solid #27272b;
+  background: #0c0c0e;
+  border-radius: 11px;
+}
+.bulk-progress-top { display: flex; justify-content: space-between; gap: 12px; color: #8d8d96; font-size: 11px; margin-bottom: 8px; }
+.bulk-progress-top strong { color: #d7d7dc; }
+.progress-track { height: 6px; background: #1d1d20; border-radius: 99px; overflow: hidden; }
+.progress-bar { width: 0; height: 100%; background: linear-gradient(90deg, var(--orange), var(--orange-2)); border-radius: inherit; transition: width .25s ease; }
+
+@media (max-width: 900px) {
+  .channels-head { align-items: stretch; }
+  .bulk-actions { width: 100%; }
+  .bulk-actions select, .bulk-actions .button { flex: 1; width: auto; }
+}
