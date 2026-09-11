@@ -1,4 +1,4 @@
-# EcomTube Scanner V3
+# EcomTube Scanner V3.1
 
 Scanner Node.js + PostgreSQL pour trouver les chaînes YouTube francophones autour de niches e-commerce et récupérer les liens présents dans leurs descriptions.
 

@@ -12,6 +12,7 @@ import {
   getChannels,
   getKnownChannels,
   getLinks,
+  getUniqueLinks,
   getDomainStats,
   getStats
 } from './repository.js';
@@ -36,7 +37,7 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 app.get('/api/health', async (_req, res) => {
   res.json({
     ok: true,
-    version: '3.0.0',
+    version: '3.1.0',
     youtubeKeyConfigured: Boolean(process.env.YOUTUBE_API_KEY),
     databaseConfigured: hasDatabase(),
     timestamp: new Date().toISOString()
@@ -181,9 +182,52 @@ app.get('/api/stats', async (_req, res, next) => {
   }
 });
 
+app.get('/api/export-unique.csv', async (_req, res, next) => {
+  try {
+    const links = await getUniqueLinks(100000);
+    const headers = [
+      'normalized_url',
+      'sample_url',
+      'domain',
+      'category',
+      'affiliate_likelihood',
+      'occurrences',
+      'channels_count',
+      'videos_count',
+      'first_published_at',
+      'last_published_at',
+      'latest_channel',
+      'latest_video',
+      'latest_youtube_url'
+    ];
+    const escapeCsv = (value) => `"${String(value ?? '').replaceAll('"', '""')}"`;
+    const rows = links.map((link) => [
+      link.normalizedUrl,
+      link.url,
+      link.domain,
+      link.category,
+      link.affiliateLikelihood,
+      link.occurrences,
+      link.channelsCount,
+      link.videosCount,
+      link.firstPublishedAt,
+      link.lastPublishedAt,
+      link.latestChannelTitle,
+      link.latestVideoTitle,
+      link.latestYoutubeUrl
+    ].map(escapeCsv).join(','));
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="youtube-ecom-fr-unique-links.csv"');
+    res.send(`\uFEFF${headers.join(',')}\n${rows.join('\n')}`);
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.get('/api/export.csv', async (_req, res, next) => {
   try {
-    const links = await getLinks({ limit: 5000 });
+    const links = await getLinks({ limit: 100000 });
     const headers = ['channel', 'video', 'published_at', 'domain', 'category', 'affiliate_likelihood', 'url', 'youtube_url'];
     const escapeCsv = (value) => `"${String(value ?? '').replaceAll('"', '""')}"`;
     const rows = links.map((link) => [
@@ -198,7 +242,7 @@ app.get('/api/export.csv', async (_req, res, next) => {
     ].map(escapeCsv).join(','));
 
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', 'attachment; filename="youtube-ecom-fr-links.csv"');
+    res.setHeader('Content-Disposition', 'attachment; filename="youtube-ecom-fr-all-links.csv"');
     res.send(`\uFEFF${headers.join(',')}\n${rows.join('\n')}`);
   } catch (error) {
     next(error);

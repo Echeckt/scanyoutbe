@@ -44,7 +44,7 @@ async function loadHealth() {
     const status = $('#apiStatus');
     if (health.youtubeKeyConfigured) {
       status.className = 'status-pill ok';
-      status.innerHTML = `<span></span> API YouTube prête${health.databaseConfigured ? ' · PostgreSQL' : ' · mémoire'} · V3`;
+      status.innerHTML = `<span></span> API YouTube prête${health.databaseConfigured ? ' · PostgreSQL' : ' · mémoire'} · V3.1`;
     } else {
       status.className = 'status-pill error';
       status.innerHTML = '<span></span> Clé YouTube manquante';

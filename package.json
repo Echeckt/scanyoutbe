@@ -1,8 +1,8 @@
 {
   "name": "youtube-ecom-fr-scanner",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "private": true,
-  "description": "Deep discovery of French-speaking ecommerce YouTube channels and links from video descriptions.",
+  "description": "Deep discovery of French-speaking ecommerce YouTube channels and CSV export of all or unique scanned links.",
   "type": "module",
   "engines": {
     "node": ">=20"
