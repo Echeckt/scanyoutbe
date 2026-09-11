@@ -56,6 +56,8 @@ export async function initDatabase() {
       published_at TIMESTAMPTZ,
       thumbnail TEXT,
       youtube_url TEXT,
+      view_count BIGINT,
+      view_count_updated_at TIMESTAMPTZ,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
@@ -81,6 +83,8 @@ export async function initDatabase() {
     ALTER TABLE channels ADD COLUMN IF NOT EXISTS first_discovered_at TIMESTAMPTZ;
     ALTER TABLE channels ADD COLUMN IF NOT EXISTS last_discovered_at TIMESTAMPTZ;
     ALTER TABLE channels ADD COLUMN IF NOT EXISTS last_verified_at TIMESTAMPTZ;
+    ALTER TABLE videos ADD COLUMN IF NOT EXISTS view_count BIGINT;
+    ALTER TABLE videos ADD COLUMN IF NOT EXISTS view_count_updated_at TIMESTAMPTZ;
 
     CREATE INDEX IF NOT EXISTS idx_links_channel_id ON links(channel_id);
     CREATE INDEX IF NOT EXISTS idx_links_domain ON links(domain);

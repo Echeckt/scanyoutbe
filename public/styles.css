@@ -158,7 +158,7 @@ h2 { margin: 5px 0 0; font-size: 20px; letter-spacing: -.02em; }
 .domain-count { font-size: 11px; color: #c5c5ca; font-weight: 800; }
 
 .links-panel { margin-top: 14px; }
-.filters { display: grid; grid-template-columns: minmax(210px, 320px) 160px; gap: 8px; }
+.filters { display: grid; grid-template-columns: minmax(210px, 320px) 120px 160px; gap: 8px; }
 .filters input, .filters select { padding: 10px 11px; font-size: 11px; }
 .table-wrap { overflow: auto; border: 1px solid #242428; border-radius: 12px; }
 table { width: 100%; min-width: 960px; border-collapse: collapse; font-size: 11px; }
@@ -439,3 +439,6 @@ td a:hover { color: var(--orange); }
   .domain-hit { grid-template-columns: 1fr; }
   .domain-hit-actions { justify-content: flex-start; flex-wrap: wrap; }
 }
+
+.views-cell { white-space: nowrap; font-variant-numeric: tabular-nums; color: #e4e4e8; }
+.views-cell strong { color: #f4f4f6; font-weight: 850; }

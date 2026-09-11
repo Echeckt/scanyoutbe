@@ -22,7 +22,7 @@ async function youtubeRequest(endpoint, params = {}) {
   }
 
   const response = await fetch(url, {
-    headers: { 'User-Agent': 'YouTube-Ecom-FR-Scanner/3.0' },
+    headers: { 'User-Agent': 'YouTube-Ecom-FR-Scanner/3.5' },
     signal: AbortSignal.timeout(25_000)
   });
 
@@ -467,6 +467,29 @@ export async function getChannel(channelId) {
   return channelFromApi(channel);
 }
 
+export async function getVideoStatistics(videoIds = []) {
+  const ids = [...new Set((videoIds || []).map((id) => String(id || '').trim()).filter(Boolean))];
+  const statistics = [];
+
+  for (let index = 0; index < ids.length; index += 50) {
+    const batch = ids.slice(index, index + 50);
+    const response = await youtubeRequest('videos', {
+      part: 'statistics',
+      id: batch.join(','),
+      maxResults: 50
+    });
+
+    for (const item of response.items || []) {
+      statistics.push({
+        id: item.id,
+        viewCount: item.statistics?.viewCount === undefined ? null : numberOrZero(item.statistics.viewCount)
+      });
+    }
+  }
+
+  return statistics;
+}
+
 export async function getUploadedVideos(uploadsPlaylistId, maxVideos = 100) {
   if (!uploadsPlaylistId) return [];
 
@@ -493,7 +516,8 @@ export async function getUploadedVideos(uploadsPlaylistId, maxVideos = 100) {
         description: item.snippet?.description || '',
         publishedAt: item.contentDetails?.videoPublishedAt || item.snippet?.publishedAt || null,
         thumbnail: item.snippet?.thumbnails?.medium?.url || item.snippet?.thumbnails?.default?.url || null,
-        youtubeUrl: `https://www.youtube.com/watch?v=${videoId}`
+        youtubeUrl: `https://www.youtube.com/watch?v=${videoId}`,
+        viewCount: null
       });
     }
 
@@ -501,5 +525,12 @@ export async function getUploadedVideos(uploadsPlaylistId, maxVideos = 100) {
     if (!pageToken || !(page.items || []).length) break;
   }
 
-  return videos.slice(0, limit);
+  const limitedVideos = videos.slice(0, limit);
+  const stats = await getVideoStatistics(limitedVideos.map((video) => video.id));
+  const viewsById = new Map(stats.map((item) => [item.id, item.viewCount]));
+
+  return limitedVideos.map((video) => ({
+    ...video,
+    viewCount: viewsById.has(video.id) ? viewsById.get(video.id) : null
+  }));
 }

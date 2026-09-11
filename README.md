@@ -1,4 +1,4 @@
-# EcomTube Scanner V3.4
+# EcomTube Scanner V3.5
 
 Le champ **Liens détectés** recherche automatiquement un NDD dans toute la base dès qu'un domaine complet est saisi.
 
@@ -130,3 +130,11 @@ Les sous-domaines sont ramenés au domaine enregistrable : `app.minea.com` devie
 Une recherche globale permet de saisir un domaine (ex. `dropified-france.com`) et de retrouver toutes ses occurrences dans l'ensemble des liens scannés, avec la chaîne, la vidéo, la date, l'URL détectée et un lien direct vers la vidéo YouTube.
 
 Endpoint : `/api/domain-search?domain=dropified-france.com`
+
+
+## V3.5 — vues vidéo
+
+- Récupération des statistiques YouTube par lots de 50 vidéos.
+- Colonne **Vues** dans les résultats de liens.
+- Tri par défaut **Vues ↓**.
+- Les anciennes vidéos sans stats sont hydratées automatiquement lors d’une recherche NDD (cache 24 h).

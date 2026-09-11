@@ -5,6 +5,7 @@ const state = {
   bulkScanning: false,
   searchMode: 'deep',
   sort: 'relevance',
+  linkSort: 'views_desc',
   domainSearchResults: []
 };
 
@@ -45,7 +46,7 @@ async function loadHealth() {
     const status = $('#apiStatus');
     if (health.youtubeKeyConfigured) {
       status.className = 'status-pill ok';
-      status.innerHTML = `<span></span> API YouTube prête${health.databaseConfigured ? ' · PostgreSQL' : ' · mémoire'} · V3.4`;
+      status.innerHTML = `<span></span> API YouTube prête${health.databaseConfigured ? ' · PostgreSQL' : ' · mémoire'} · V3.5`;
     } else {
       status.className = 'status-pill error';
       status.innerHTML = '<span></span> Clé YouTube manquante';
@@ -393,9 +394,21 @@ function renderLinks() {
       .some((value) => String(value || '').toLowerCase().includes(search));
   });
 
+  links.sort((a, b) => {
+    if (state.linkSort === 'views_asc') {
+      return Number(a.viewCount ?? Number.MAX_SAFE_INTEGER) - Number(b.viewCount ?? Number.MAX_SAFE_INTEGER)
+        || new Date(b.publishedAt || 0) - new Date(a.publishedAt || 0);
+    }
+    if (state.linkSort === 'date_desc') {
+      return new Date(b.publishedAt || 0) - new Date(a.publishedAt || 0);
+    }
+    return Number(b.viewCount ?? -1) - Number(a.viewCount ?? -1)
+      || new Date(b.publishedAt || 0) - new Date(a.publishedAt || 0);
+  });
+
   if (!links.length) {
     const global = Array.isArray(state.globalLinkResults);
-    body.innerHTML = `<tr><td colspan="6" class="empty-cell">${global && state.globalLinkQuery ? `Aucune occurrence de <strong>${escapeHtml(state.globalLinkQuery)}</strong> dans toute la base scannée.` : 'Aucun lien correspondant.'}</td></tr>`;
+    body.innerHTML = `<tr><td colspan="7" class="empty-cell">${global && state.globalLinkQuery ? `Aucune occurrence de <strong>${escapeHtml(state.globalLinkQuery)}</strong> dans toute la base scannée.` : 'Aucun lien correspondant.'}</td></tr>`;
     return;
   }
 
@@ -403,6 +416,7 @@ function renderLinks() {
     <tr>
       <td><span class="truncate" title="${escapeHtml(link.channelTitle)}">${escapeHtml(link.channelTitle)}</span></td>
       <td><a class="truncate" href="${escapeHtml(link.youtubeUrl || `https://www.youtube.com/watch?v=${link.videoId}`)}" target="_blank" rel="noopener" title="${escapeHtml(link.videoTitle)}">${escapeHtml(link.videoTitle)}</a></td>
+      <td class="views-cell" title="${link.viewCount === null || link.viewCount === undefined ? 'Nombre de vues non disponible' : `${exactFmt.format(Number(link.viewCount))} vues`}">${link.viewCount === null || link.viewCount === undefined ? '—' : `<strong>${fmt.format(Number(link.viewCount))}</strong>`}</td>
       <td><strong>${escapeHtml(link.domain)}</strong></td>
       <td><span class="badge">${escapeHtml(link.category)}</span></td>
       <td><span class="badge ${escapeHtml(link.affiliateLikelihood)}">${escapeHtml(link.affiliateLikelihood)}</span></td>
@@ -466,6 +480,10 @@ $('#discoverForm').addEventListener('submit', discover);
 $('#scanAllBtn').addEventListener('click', scanAllChannels);
 $('#linkFilter').addEventListener('input', handleLinkFilterInput);
 $('#categoryFilter').addEventListener('change', renderLinks);
+$('#linkSort').addEventListener('change', (event) => {
+  state.linkSort = event.target.value;
+  renderLinks();
+});
 $('#channelSort').addEventListener('change', (event) => {
   state.sort = event.target.value;
   renderChannels();

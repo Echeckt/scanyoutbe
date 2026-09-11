@@ -153,6 +153,8 @@ export async function saveScan(channel, videosWithLinks) {
           videoTitle: item.video.title,
           publishedAt: item.video.publishedAt,
           youtubeUrl: item.video.youtubeUrl,
+          viewCount: item.video.viewCount ?? null,
+          viewCountUpdatedAt: item.video.viewCount === null || item.video.viewCount === undefined ? null : scannedAt,
           channelTitle: channel.title
         });
       }
@@ -201,8 +203,8 @@ export async function saveScan(channel, videosWithLinks) {
     for (const item of videosWithLinks) {
       const video = item.video;
       await client.query(`
-        INSERT INTO videos (id, channel_id, title, description, published_at, thumbnail, youtube_url, updated_at)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())
+        INSERT INTO videos (id, channel_id, title, description, published_at, thumbnail, youtube_url, view_count, view_count_updated_at, updated_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,CASE WHEN $8::bigint IS NULL THEN NULL ELSE NOW() END,NOW())
         ON CONFLICT (id) DO UPDATE SET
           channel_id = EXCLUDED.channel_id,
           title = EXCLUDED.title,
@@ -210,8 +212,10 @@ export async function saveScan(channel, videosWithLinks) {
           published_at = EXCLUDED.published_at,
           thumbnail = EXCLUDED.thumbnail,
           youtube_url = EXCLUDED.youtube_url,
+          view_count = COALESCE(EXCLUDED.view_count, videos.view_count),
+          view_count_updated_at = CASE WHEN EXCLUDED.view_count IS NULL THEN videos.view_count_updated_at ELSE NOW() END,
           updated_at = NOW()
-      `, [video.id, channel.id, video.title, video.description, video.publishedAt, video.thumbnail, video.youtubeUrl]);
+      `, [video.id, channel.id, video.title, video.description, video.publishedAt, video.thumbnail, video.youtubeUrl, video.viewCount ?? null]);
 
       for (const link of item.links) {
         await client.query(`
@@ -283,7 +287,15 @@ export async function getLinks({ channelId, limit = 1000 } = {}) {
     return [...memory.links.values()]
       .filter((link) => frenchIds.has(link.channelId))
       .filter((link) => !channelId || link.channelId === channelId)
-      .sort((a, b) => new Date(b.publishedAt || 0) - new Date(a.publishedAt || 0))
+      .map((link) => {
+        const video = memory.videos.get(link.videoId);
+        return {
+          ...link,
+          viewCount: video?.viewCount ?? link.viewCount ?? null,
+          viewCountUpdatedAt: video?.viewCountUpdatedAt ?? link.viewCountUpdatedAt ?? null
+        };
+      })
+      .sort((a, b) => Number(b.viewCount ?? -1) - Number(a.viewCount ?? -1) || new Date(b.publishedAt || 0) - new Date(a.publishedAt || 0))
       .slice(0, safeLimit);
   }
 
@@ -299,12 +311,12 @@ export async function getLinks({ channelId, limit = 1000 } = {}) {
     SELECT
       l.id, l.video_id, l.channel_id, l.url, l.normalized_url, l.domain, l.category,
       l.affiliate_likelihood, v.title AS video_title, v.published_at, v.youtube_url,
-      c.title AS channel_title
+      v.view_count, v.view_count_updated_at, c.title AS channel_title
     FROM links l
     JOIN videos v ON v.id = l.video_id
     JOIN channels c ON c.id = l.channel_id
     WHERE ${where.join(' AND ')}
-    ORDER BY v.published_at DESC NULLS LAST, l.id DESC
+    ORDER BY v.view_count DESC NULLS LAST, v.published_at DESC NULLS LAST, l.id DESC
     LIMIT $${params.length}
   `, params);
 
@@ -320,6 +332,8 @@ export async function getLinks({ channelId, limit = 1000 } = {}) {
     videoTitle: row.video_title,
     publishedAt: row.published_at,
     youtubeUrl: row.youtube_url,
+    viewCount: row.view_count === null || row.view_count === undefined ? null : Number(row.view_count),
+    viewCountUpdatedAt: row.view_count_updated_at,
     channelTitle: row.channel_title
   }));
 }
@@ -455,7 +469,15 @@ export async function getDomainOccurrences(domain, limit = 5000) {
         const value = String(link.domain || '').toLowerCase().replace(/^www\./, '');
         return value === needle || value.endsWith(`.${needle}`);
       })
-      .sort((a, b) => new Date(b.publishedAt || 0) - new Date(a.publishedAt || 0));
+      .map((link) => {
+        const video = memory.videos.get(link.videoId);
+        return {
+          ...link,
+          viewCount: video?.viewCount ?? link.viewCount ?? null,
+          viewCountUpdatedAt: video?.viewCountUpdatedAt ?? link.viewCountUpdatedAt ?? null
+        };
+      })
+      .sort((a, b) => Number(b.viewCount ?? -1) - Number(a.viewCount ?? -1) || new Date(b.publishedAt || 0) - new Date(a.publishedAt || 0));
 
     const all = results;
     return {
@@ -484,13 +506,13 @@ export async function getDomainOccurrences(domain, limit = 5000) {
       SELECT
         l.id, l.video_id, l.channel_id, l.url, l.normalized_url, l.domain, l.category,
         l.affiliate_likelihood, v.title AS video_title, v.published_at, v.youtube_url,
-        c.title AS channel_title
+        v.view_count, v.view_count_updated_at, c.title AS channel_title
       FROM links l
       JOIN videos v ON v.id = l.video_id
       JOIN channels c ON c.id = l.channel_id
       WHERE c.is_french IS TRUE
         AND ${matchSql}
-      ORDER BY v.published_at DESC NULLS LAST, l.id DESC
+      ORDER BY v.view_count DESC NULLS LAST, v.published_at DESC NULLS LAST, l.id DESC
       LIMIT $2
     `, [needle, safeLimit])
   ]);
@@ -512,9 +534,49 @@ export async function getDomainOccurrences(domain, limit = 5000) {
       videoTitle: row.video_title,
       publishedAt: row.published_at,
       youtubeUrl: row.youtube_url,
+      viewCount: row.view_count === null || row.view_count === undefined ? null : Number(row.view_count),
+      viewCountUpdatedAt: row.view_count_updated_at,
       channelTitle: row.channel_title
     }))
   };
+}
+
+export async function updateVideoViewCounts(items = []) {
+  const clean = (items || [])
+    .map((item) => ({ id: String(item?.id || '').trim(), viewCount: item?.viewCount }))
+    .filter((item) => item.id && item.viewCount !== null && item.viewCount !== undefined && Number.isFinite(Number(item.viewCount)));
+
+  if (!clean.length) return 0;
+  const updatedAt = new Date().toISOString();
+
+  if (!hasDatabase()) {
+    for (const item of clean) {
+      const existing = memory.videos.get(item.id);
+      if (!existing) continue;
+      memory.videos.set(item.id, { ...existing, viewCount: Number(item.viewCount), viewCountUpdatedAt: updatedAt });
+    }
+    return clean.length;
+  }
+
+  const db = getPool();
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    for (const item of clean) {
+      await client.query(`
+        UPDATE videos
+        SET view_count = $2, view_count_updated_at = NOW(), updated_at = NOW()
+        WHERE id = $1
+      `, [item.id, Number(item.viewCount)]);
+    }
+    await client.query('COMMIT');
+    return clean.length;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 export async function getDomainStats(limit = 100) {

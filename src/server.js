@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import helmet from 'helmet';
 import { initDatabase, hasDatabase } from './db.js';
-import { discoverChannels, getChannel, getUploadedVideos } from './youtube.js';
+import { discoverChannels, getChannel, getUploadedVideos, getVideoStatistics } from './youtube.js';
 import { extractLinks } from './links.js';
 import {
   saveChannel,
@@ -14,6 +14,7 @@ import {
   getLinks,
   getUniqueLinks,
   getDomainOccurrences,
+  updateVideoViewCounts,
   getDomainStats,
   getStats
 } from './repository.js';
@@ -38,7 +39,7 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 app.get('/api/health', async (_req, res) => {
   res.json({
     ok: true,
-    version: '3.4.0',
+    version: '3.5.0',
     youtubeKeyConfigured: Boolean(process.env.YOUTUBE_API_KEY),
     databaseConfigured: hasDatabase(),
     timestamp: new Date().toISOString()
@@ -193,7 +194,37 @@ app.get('/api/domain-search', async (req, res, next) => {
     }
 
     const data = await getDomainOccurrences(domain, req.query.limit || 5000);
-    res.json({ domain, ...data });
+
+    // Les anciennes vidéos scannées avant la V3.5 n'ont pas encore de compteur de vues.
+    // On hydrate automatiquement les compteurs manquants / vieux de plus de 24 h, par lots de 50 IDs.
+    const now = Date.now();
+    const staleIds = [...new Set(data.results
+      .filter((item) => {
+        if (item.viewCount === null || item.viewCount === undefined) return true;
+        if (!item.viewCountUpdatedAt) return true;
+        const age = now - new Date(item.viewCountUpdatedAt).getTime();
+        return !Number.isFinite(age) || age > 24 * 60 * 60 * 1000;
+      })
+      .map((item) => item.videoId)
+      .filter(Boolean))]
+      .slice(0, 500);
+
+    if (staleIds.length) {
+      const statistics = await getVideoStatistics(staleIds);
+      await updateVideoViewCounts(statistics);
+      const viewsById = new Map(statistics.map((item) => [item.id, item.viewCount]));
+      const refreshedAt = new Date().toISOString();
+
+      data.results = data.results.map((item) => viewsById.has(item.videoId)
+        ? { ...item, viewCount: viewsById.get(item.videoId), viewCountUpdatedAt: refreshedAt }
+        : item);
+    }
+
+    data.results.sort((a, b) =>
+      Number(b.viewCount ?? -1) - Number(a.viewCount ?? -1) ||
+      new Date(b.publishedAt || 0) - new Date(a.publishedAt || 0));
+
+    res.json({ domain, ...data, sort: 'views_desc' });
   } catch (error) {
     next(error);
   }
@@ -348,11 +379,12 @@ app.get('/api/export-unique.csv', async (_req, res, next) => {
 app.get('/api/export.csv', async (_req, res, next) => {
   try {
     const links = await getLinks({ limit: 100000 });
-    const headers = ['channel', 'video', 'published_at', 'domain', 'category', 'affiliate_likelihood', 'url', 'youtube_url'];
+    const headers = ['channel', 'video', 'views', 'published_at', 'domain', 'category', 'affiliate_likelihood', 'url', 'youtube_url'];
     const escapeCsv = (value) => `"${String(value ?? '').replaceAll('"', '""')}"`;
     const rows = links.map((link) => [
       link.channelTitle,
       link.videoTitle,
+      link.viewCount ?? '',
       link.publishedAt,
       link.domain,
       link.category,
