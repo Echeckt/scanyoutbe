@@ -75,6 +75,70 @@ export async function initDatabase() {
       UNIQUE(video_id, normalized_url)
     );
 
+
+
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      email TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      credits INTEGER NOT NULL DEFAULT 0 CHECK (credits >= 0),
+      stripe_customer_id TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS user_sessions (
+      token_hash TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      expires_at TIMESTAMPTZ NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS user_searches (
+      id BIGSERIAL PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      query TEXT NOT NULL,
+      mode TEXT NOT NULL,
+      filters JSONB NOT NULL DEFAULT '{}'::jsonb,
+      cache_key TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      credit_charged BOOLEAN NOT NULL DEFAULT TRUE,
+      result_summary JSONB NOT NULL DEFAULT '{}'::jsonb,
+      failure_reason TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      completed_at TIMESTAMPTZ
+    );
+
+    CREATE TABLE IF NOT EXISTS user_search_channels (
+      search_id BIGINT NOT NULL REFERENCES user_searches(id) ON DELETE CASCADE,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      channel_id TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (search_id, channel_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS credit_transactions (
+      id BIGSERIAL PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      delta INTEGER NOT NULL,
+      balance_after INTEGER NOT NULL,
+      type TEXT NOT NULL,
+      reference TEXT,
+      metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS payments (
+      stripe_session_id TEXT PRIMARY KEY,
+      stripe_payment_intent TEXT,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      amount_cents INTEGER NOT NULL DEFAULT 499,
+      currency TEXT NOT NULL DEFAULT 'usd',
+      credits INTEGER NOT NULL DEFAULT 1,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      paid_at TIMESTAMPTZ
+    );
     CREATE TABLE IF NOT EXISTS discovery_cache (
       cache_key TEXT PRIMARY KEY,
       query TEXT NOT NULL,
@@ -103,6 +167,13 @@ export async function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_channels_last_verified_at ON channels(last_verified_at DESC);
     CREATE INDEX IF NOT EXISTS idx_channels_is_french ON channels(is_french);
     CREATE INDEX IF NOT EXISTS idx_discovery_cache_updated_at ON discovery_cache(updated_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_user_sessions_user_id ON user_sessions(user_id);
+    CREATE INDEX IF NOT EXISTS idx_user_sessions_expires_at ON user_sessions(expires_at);
+    CREATE INDEX IF NOT EXISTS idx_user_searches_user_id_created_at ON user_searches(user_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_user_search_channels_user_channel ON user_search_channels(user_id, channel_id);
+    CREATE INDEX IF NOT EXISTS idx_credit_transactions_user_id ON credit_transactions(user_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_payments_user_id ON payments(user_id, created_at DESC);
+
   `);
 
   return true;

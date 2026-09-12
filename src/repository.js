@@ -301,7 +301,7 @@ export async function saveScan(channel, videosWithLinks) {
           view_count = COALESCE(EXCLUDED.view_count, videos.view_count),
           view_count_updated_at = CASE WHEN EXCLUDED.view_count IS NULL THEN videos.view_count_updated_at ELSE NOW() END,
           updated_at = NOW()
-      `, [video.id, channel.id, video.title, video.description, video.publishedAt, video.thumbnail, video.youtubeUrl, video.viewCount ?? null]);
+      `, [video.id, channel.id, video.title, null, video.publishedAt, video.thumbnail, video.youtubeUrl, video.viewCount ?? null]);
 
       for (const link of item.links) {
         await client.query(`

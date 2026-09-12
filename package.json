@@ -1,8 +1,8 @@
 {
   "name": "scan-ytb",
-  "version": "4.7.0",
+  "version": "5.0.0",
   "private": true,
-  "description": "ScanYTB - YouTube discovery with quota-aware PostgreSQL search caching.",
+  "description": "ScanYTB - paid YouTube intelligence searches with accounts, credits and Stripe Checkout.",
   "type": "module",
   "engines": {
     "node": ">=20"
@@ -10,12 +10,14 @@
   "scripts": {
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
-    "check": "node --check src/server.js && node --check src/youtube.js && node --check src/repository.js && node --check src/links.js && node --check public/app.js"
+    "check": "node --check src/server.js && node --check src/youtube.js && node --check src/repository.js && node --check src/links.js && node --check src/account.js && node --check public/app.js"
   },
   "dependencies": {
     "dotenv": "^16.6.1",
     "express": "^5.1.0",
     "helmet": "^8.1.0",
-    "pg": "^8.16.3"
+    "pg": "^8.16.3",
+    "bcryptjs": "^2.4.3",
+    "stripe": "^18.0.0"
   }
 }

@@ -74,13 +74,18 @@
         <div class="topbar-actions">
           <a class="quiet-link" href="#exports">Exports</a>
           <a class="button secondary compact" href="#links">Chercher un NDD</a>
+          <button id="creditsButton" class="credit-pill" type="button" hidden>0 crédit</button>
+          <button id="accountButton" class="button secondary compact" type="button">Se connecter</button>
         </div>
       </header>
 
       <main class="content">
         <section id="home" class="hero-card panel">
           <div class="hero-copy">
-            <div class="eyebrow">INTELLIGENCE YOUTUBE FR</div>
+            <div class="hero-topline">
+              <div class="eyebrow">INTELLIGENCE YOUTUBE FR</div>
+              <button id="heroAccountButton" class="hero-account-button" type="button">Se connecter</button>
+            </div>
             <h1>Scanner YouTube</h1>
             <h2 class="hero-title">Trouver les <span>liens, outils et sponsors</span> des chaînes</h2>
             <p>Analyse les chaînes YouTube françaises et récupère les liens présents dans leurs descriptions : SaaS, outils, sponsors, affiliations et noms de domaine.</p>
@@ -168,6 +173,7 @@
                 </div>
               </div>
             </form>
+            <div class="search-price-note"><span>1 recherche = 1 crédit</span><strong>4,99 $</strong><small>Le crédit est rendu automatiquement si la recherche échoue.</small></div>
           </div>
 
           <div class="hero-visual" aria-hidden="true">
@@ -350,6 +356,66 @@
           <span>Scanner les chaînes YouTube françaises, leurs liens et leurs domaines.</span>
         </footer>
       </main>
+    </div>
+  </div>
+
+
+  <div id="authModal" class="modal-backdrop" hidden>
+    <div class="modal-card auth-modal-card" role="dialog" aria-modal="true" aria-labelledby="authTitle">
+      <button class="modal-close" type="button" data-close-modal="authModal" aria-label="Fermer">×</button>
+      <div class="modal-icon account-modal-icon" aria-hidden="true">●</div>
+      <div class="eyebrow">COMPTE SCANYTB</div>
+      <h2 id="authTitle">Connecte-toi pour lancer ta recherche</h2>
+      <p>Crée ton compte gratuitement. Une recherche coûte ensuite 1 crédit, soit 4,99 $.</p>
+      <div class="auth-tabs" role="tablist">
+        <button id="authTabLogin" class="auth-tab active" type="button">Connexion</button>
+        <button id="authTabRegister" class="auth-tab" type="button">Créer un compte</button>
+      </div>
+      <form id="authForm" class="auth-form">
+        <label><span>E-mail</span><input id="authEmail" type="email" autocomplete="email" required placeholder="toi@exemple.com" /></label>
+        <label><span>Mot de passe</span><input id="authPassword" type="password" autocomplete="current-password" minlength="8" required placeholder="8 caractères minimum" /></label>
+        <button id="authSubmit" class="button primary" type="submit">Se connecter</button>
+      </form>
+      <p id="authError" class="form-error" hidden></p>
+    </div>
+  </div>
+
+  <div id="purchaseModal" class="modal-backdrop" hidden>
+    <div class="modal-card purchase-modal-card" role="dialog" aria-modal="true" aria-labelledby="purchaseTitle">
+      <button class="modal-close" type="button" data-close-modal="purchaseModal" aria-label="Fermer">×</button>
+      <span class="modal-icon credit-modal-icon" aria-hidden="true">1</span>
+      <div class="eyebrow">CRÉDIT DE RECHERCHE</div>
+      <h2 id="purchaseTitle">Lancer cette recherche pour 4,99 $</h2>
+      <p>Le paiement est sécurisé par Stripe. Après paiement, ton crédit est ajouté immédiatement et ta recherche peut démarrer.</p>
+      <div class="purchase-summary">
+        <div><span>1 crédit</span><strong>1 recherche</strong></div>
+        <div><span>Prix</span><strong>4,99 $</strong></div>
+      </div>
+      <div class="purchase-protection">✓ Si YouTube refuse la recherche ou qu’une erreur technique survient, le crédit est automatiquement rendu.</div>
+      <div class="modal-actions">
+        <button class="button secondary" type="button" data-close-modal="purchaseModal">Annuler</button>
+        <button id="buyCreditButton" class="button primary" type="button">Payer 4,99 $ avec Stripe →</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="accountModal" class="modal-backdrop" hidden>
+    <div class="modal-card account-panel-card" role="dialog" aria-modal="true" aria-labelledby="accountTitle">
+      <button class="modal-close" type="button" data-close-modal="accountModal" aria-label="Fermer">×</button>
+      <div class="account-header">
+        <div>
+          <div class="eyebrow">MON COMPTE</div>
+          <h2 id="accountTitle">ScanYTB</h2>
+          <p id="accountEmail">—</p>
+        </div>
+        <div class="account-credit-box"><strong id="accountCredits">0</strong><span>crédit</span></div>
+      </div>
+      <div class="account-actions">
+        <button id="accountBuyCredit" class="button primary" type="button">Acheter 1 crédit · 4,99 $</button>
+        <button id="logoutButton" class="button secondary" type="button">Déconnexion</button>
+      </div>
+      <div class="account-history-head"><strong>Mes recherches</strong><span>Historique du compte</span></div>
+      <div id="accountHistory" class="account-history"><div class="history-empty">Aucune recherche pour le moment.</div></div>
     </div>
   </div>
 

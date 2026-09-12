@@ -1144,3 +1144,84 @@ th { background: #0d1218; }
   .links-panel,
   .exports-panel { padding: 14px; }
 }
+
+/* V5 — comptes, crédits et paiement */
+.hero-topline { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.hero-account-button {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 30px; padding: 0 10px; border: 1px solid #2b333e; border-radius: 999px;
+  background: rgba(10,14,19,.82); color: #b6bec9; font-size: 9px; font-weight: 780; cursor: pointer;
+}
+.hero-account-button:hover { border-color: rgba(255,116,23,.45); color: #fff; }
+.credit-pill {
+  min-height: 36px; padding: 0 11px; border: 1px solid rgba(255,116,23,.26); border-radius: 10px;
+  background: rgba(255,116,23,.08); color: var(--orange-2); font-size: 10px; font-weight: 820; cursor: pointer;
+}
+.search-price-note { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; margin-top: 14px; color: #727d8c; font-size: 8px; }
+.search-price-note span { color: #9ca5b1; }
+.search-price-note strong { color: var(--orange-2); font-size: 9px; }
+.search-price-note small { font-size: 8px; }
+
+.modal-card { position: relative; }
+.modal-close {
+  position: absolute; top: 14px; right: 14px; width: 30px; height: 30px; display: grid; place-items: center;
+  border: 1px solid #28313b; border-radius: 9px; background: #0b1016; color: #8993a0; font-size: 18px; line-height: 1; cursor: pointer;
+}
+.modal-close:hover { color: #fff; border-color: #3b4654; }
+.account-modal-icon { color: var(--orange-2); border-color: rgba(255,116,23,.2); background: rgba(255,116,23,.08); }
+.credit-modal-icon { color: var(--orange-2); border-color: rgba(255,116,23,.2); background: rgba(255,116,23,.08); }
+.auth-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin: 20px 0 14px; padding: 4px; border: 1px solid #242c35; border-radius: 12px; background: #090d12; }
+.auth-tab { min-height: 36px; border: 0; border-radius: 9px; background: transparent; color: #727d8c; font-size: 10px; font-weight: 780; cursor: pointer; }
+.auth-tab.active { background: #161d25; color: #fff; box-shadow: inset 0 0 0 1px #2a3440; }
+.auth-form { display: grid; gap: 11px; }
+.auth-form label { display: grid; gap: 6px; }
+.auth-form label > span { color: #778291; font-size: 8px; font-weight: 820; letter-spacing: .08em; text-transform: uppercase; }
+.auth-form input { width: 100%; min-height: 44px; padding: 0 12px; border: 1px solid #2a333e; border-radius: 11px; outline: 0; background: #090d12; color: #fff; font-size: 11px; }
+.auth-form input:focus { border-color: rgba(255,116,23,.58); box-shadow: 0 0 0 3px rgba(255,116,23,.08); }
+.auth-form .button { width: 100%; margin-top: 3px; }
+.form-error { margin-top: 11px !important; padding: 9px 11px; border: 1px solid rgba(255,107,115,.25); border-radius: 9px; background: rgba(255,107,115,.06); color: #ffabb0 !important; }
+
+.purchase-summary { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 18px; }
+.purchase-summary > div { padding: 12px; border: 1px solid #262f3a; border-radius: 11px; background: #0a0f15; }
+.purchase-summary span { display: block; color: #75808e; font-size: 8px; }
+.purchase-summary strong { display: block; margin-top: 5px; font-size: 15px; }
+.purchase-protection { margin-top: 10px; padding: 10px 11px; border: 1px solid rgba(70,216,144,.15); border-radius: 10px; background: rgba(70,216,144,.05); color: #8bdcaf; font-size: 9px; line-height: 1.5; }
+
+.account-panel-card { width: min(620px, 100%); }
+.account-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; padding-right: 40px; }
+.account-header h2 { margin-top: 7px; }
+.account-header p { margin-top: 4px; color: #7e8997; }
+.account-credit-box { min-width: 90px; padding: 12px 14px; border: 1px solid rgba(255,116,23,.22); border-radius: 13px; background: rgba(255,116,23,.07); text-align: center; }
+.account-credit-box strong { display: block; color: var(--orange-2); font-size: 24px; }
+.account-credit-box span { display: block; margin-top: 3px; color: #8993a1; font-size: 8px; text-transform: uppercase; letter-spacing: .08em; }
+.account-actions { display: flex; gap: 8px; margin-top: 18px; }
+.account-history-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 24px; padding-top: 18px; border-top: 1px solid #242c35; }
+.account-history-head strong { font-size: 12px; }
+.account-history-head span { color: #6f7987; font-size: 8px; }
+.account-history { display: grid; gap: 7px; max-height: 320px; margin-top: 10px; overflow: auto; }
+.history-row { display: grid; grid-template-columns: minmax(0,1fr) auto auto; align-items: center; gap: 10px; padding: 10px 11px; border: 1px solid #222b35; border-radius: 11px; background: #0a0f15; }
+.history-main { min-width: 0; }
+.history-main strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; }
+.history-main span { display: block; margin-top: 3px; color: #727d8b; font-size: 8px; }
+.history-count { color: #aab2bd; font-size: 9px; white-space: nowrap; }
+.history-open { min-height: 30px; padding: 0 9px; border: 1px solid #2b3541; border-radius: 8px; background: #11171e; color: #dce1e7; font-size: 8px; font-weight: 780; cursor: pointer; }
+.history-open:hover { border-color: rgba(255,116,23,.45); color: #fff; }
+.history-status { display: inline-flex; margin-left: 5px; padding: 2px 5px; border-radius: 99px; background: #151c24; color: #75808e; font-size: 7px; }
+.history-status.completed { color: #7fe0ab; background: rgba(70,216,144,.08); }
+.history-status.refunded { color: #ffcf75; background: rgba(255,207,117,.08); }
+.history-empty { padding: 24px; color: #687381; text-align: center; font-size: 9px; }
+
+@media (max-width: 920px) {
+  .hero-topline { align-items: flex-start; }
+  .hero-account-button { min-height: 28px; flex: 0 0 auto; }
+}
+
+@media (max-width: 620px) {
+  .search-price-note { align-items: flex-start; }
+  .search-price-note small { flex-basis: 100%; }
+  .account-header { align-items: center; }
+  .account-actions { display: grid; grid-template-columns: 1fr; }
+  .history-row { grid-template-columns: minmax(0,1fr) auto; }
+  .history-count { grid-column: 1; }
+  .history-open { grid-column: 2; grid-row: 1 / span 2; }
+}

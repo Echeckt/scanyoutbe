@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
 import helmet from 'helmet';
+import Stripe from 'stripe';
 import { initDatabase, hasDatabase } from './db.js';
 import { discoverChannels, getChannel, getUploadedVideos, getVideoStatistics } from './youtube.js';
 import { extractLinks } from './links.js';
@@ -22,11 +23,21 @@ import {
   getDiscoveryCache,
   saveDiscoveryCache
 } from './repository.js';
+import {
+  createUser, authenticateUser, createSession, setSessionCookie, clearSessionCookie,
+  destroySession, getUserFromRequest, getUserById, reserveSearchCredit, completeUserSearch,
+  refundSearchCredit, canUserScanChannel, hasCompletedSearch, getSearchHistory, getUserSearch,
+  recordCheckoutSession, fulfillPaidCheckout
+} from './account.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
+const APP_URL = String(process.env.APP_URL || 'https://scan-ytb.com').replace(/\/$/, '');
+const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null;
+
+app.set('trust proxy', 1);
 
 app.use(helmet({
   contentSecurityPolicy: {
@@ -37,20 +48,155 @@ app.use(helmet({
     }
   }
 }));
+app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  if (!stripe || !process.env.STRIPE_WEBHOOK_SECRET) {
+    return res.status(503).send('Stripe webhook non configuré.');
+  }
+  try {
+    const signature = req.headers['stripe-signature'];
+    const event = stripe.webhooks.constructEvent(req.body, signature, process.env.STRIPE_WEBHOOK_SECRET);
+    if (event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded') {
+      await fulfillPaidCheckout(event.data.object);
+    }
+    res.json({ received: true });
+  } catch (error) {
+    console.error('Stripe webhook error:', error.message);
+    res.status(400).send(`Webhook Error: ${error.message}`);
+  }
+});
+
 app.use(express.json({ limit: '1mb' }));
 app.use(express.static(path.join(__dirname, '..', 'public')));
+
+async function requireAuth(req, res, next) {
+  try {
+    const user = await getUserFromRequest(req);
+    if (!user) return res.status(401).json({ error: 'Connecte-toi pour continuer.', code: 'AUTH_REQUIRED' });
+    req.user = user;
+    next();
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function requirePaidAccess(req, res, next) {
+  try {
+    const user = await getUserFromRequest(req);
+    if (!user) return res.status(401).json({ error: 'Connecte-toi pour continuer.', code: 'AUTH_REQUIRED' });
+    if (!(await hasCompletedSearch(user.id))) {
+      return res.status(403).json({ error: 'Lance d’abord une recherche pour accéder à ces données.', code: 'SEARCH_REQUIRED' });
+    }
+    req.user = user;
+    next();
+  } catch (error) {
+    next(error);
+  }
+}
+
+app.get('/api/auth/session', async (req, res, next) => {
+  try {
+    const user = await getUserFromRequest(req);
+    res.json({ user });
+  } catch (error) { next(error); }
+});
+
+app.post('/api/auth/register', async (req, res, next) => {
+  try {
+    const user = await createUser(req.body?.email, req.body?.password);
+    const session = await createSession(user.id);
+    setSessionCookie(res, session.token, session.expiresAt);
+    res.status(201).json({ user });
+  } catch (error) { next(error); }
+});
+
+app.post('/api/auth/login', async (req, res, next) => {
+  try {
+    const user = await authenticateUser(req.body?.email, req.body?.password);
+    const session = await createSession(user.id);
+    setSessionCookie(res, session.token, session.expiresAt);
+    res.json({ user });
+  } catch (error) { next(error); }
+});
+
+app.post('/api/auth/logout', async (req, res, next) => {
+  try {
+    await destroySession(req);
+    clearSessionCookie(res);
+    res.json({ ok: true });
+  } catch (error) { next(error); }
+});
+
+app.get('/api/account/history', requireAuth, async (req, res, next) => {
+  try {
+    res.json({ searches: await getSearchHistory(req.user.id, req.query.limit || 30) });
+  } catch (error) { next(error); }
+});
+
+app.get('/api/account/searches/:id', requireAuth, async (req, res, next) => {
+  try {
+    const search = await getUserSearch(req.user.id, Number(req.params.id));
+    if (!search) return res.status(404).json({ error: 'Recherche introuvable.' });
+    let payload = null;
+    if (search.cacheKey && search.status === 'completed') {
+      payload = (await getDiscoveryCache(search.cacheKey, { maxAgeHours: 24, allowStale: true }))?.payload || null;
+    }
+    res.json({ search, payload });
+  } catch (error) { next(error); }
+});
+
+app.post('/api/billing/checkout', requireAuth, async (req, res, next) => {
+  try {
+    if (!stripe) return res.status(503).json({ error: 'Le paiement Stripe n’est pas encore configuré.', code: 'STRIPE_NOT_CONFIGURED' });
+    const checkout = await stripe.checkout.sessions.create({
+      mode: 'payment',
+      customer_email: req.user.email,
+      line_items: [{
+        quantity: 1,
+        price_data: {
+          currency: 'usd',
+          unit_amount: 499,
+          product_data: {
+            name: 'ScanYTB — 1 crédit de recherche',
+            description: 'Un crédit pour lancer une recherche YouTube sur ScanYTB.'
+          }
+        }
+      }],
+      metadata: { user_id: req.user.id, credits: '1' },
+      client_reference_id: req.user.id,
+      success_url: `${APP_URL}/?payment=success&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${APP_URL}/?payment=cancelled`,
+      locale: 'fr'
+    });
+    await recordCheckoutSession({ sessionId: checkout.id, userId: req.user.id, amountCents: 499, currency: 'usd', credits: 1 });
+    res.json({ url: checkout.url });
+  } catch (error) { next(error); }
+});
+
+app.post('/api/billing/verify-session', requireAuth, async (req, res, next) => {
+  try {
+    if (!stripe) return res.status(503).json({ error: 'Stripe non configuré.' });
+    const sessionId = String(req.body?.sessionId || '').trim();
+    if (!sessionId) return res.status(400).json({ error: 'Session Stripe manquante.' });
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
+    if (String(session.metadata?.user_id || '') !== req.user.id) return res.status(403).json({ error: 'Session de paiement invalide.' });
+    if (session.payment_status === 'paid') await fulfillPaidCheckout(session);
+    res.json({ paid: session.payment_status === 'paid', user: await getUserById(req.user.id) });
+  } catch (error) { next(error); }
+});
 
 app.get('/api/health', async (_req, res) => {
   res.json({
     ok: true,
-    version: '4.2.0',
+    version: '5.0.0',
     youtubeKeyConfigured: Boolean(process.env.YOUTUBE_API_KEY),
     databaseConfigured: hasDatabase(),
+    stripeConfigured: Boolean(stripe && process.env.STRIPE_WEBHOOK_SECRET),
     timestamp: new Date().toISOString()
   });
 });
 
-app.post('/api/discover', async (req, res, next) => {
+app.post('/api/discover', requireAuth, async (req, res, next) => {
+  let reservation = null;
   try {
     const query = String(req.body?.query || '').trim();
     if (!query) return res.status(400).json({ error: 'Entre un mot-clé de recherche.' });
@@ -72,11 +218,29 @@ app.post('/api/discover', async (req, res, next) => {
       .update(JSON.stringify({ query: normalizedQuery, ...cacheParams }))
       .digest('hex');
 
-    // Par défaut, une recherche identique faite dans les 24 h ne consomme aucun appel search.list.
+    // Le crédit est réservé côté serveur avant la recherche. Toute erreur technique le rembourse automatiquement.
+    reservation = await reserveSearchCredit(req.user.id, {
+      query,
+      mode,
+      filters: cacheParams,
+      cacheKey
+    });
+
+    const finalize = async (payload) => {
+      const channels = Array.isArray(payload.channels) ? payload.channels : [];
+      await completeUserSearch(reservation.searchId, req.user.id, payload, channels.map((channel) => channel.id));
+      return res.json({
+        ...payload,
+        userSearchId: reservation.searchId,
+        creditsRemaining: reservation.creditsRemaining
+      });
+    };
+
+    // Une recherche identique faite dans les 24 h réutilise le cache YouTube, mais reste une recherche achetée.
     if (!forceRefresh) {
       const cached = await getDiscoveryCache(cacheKey, { maxAgeHours: 24, allowStale: false });
       if (cached?.payload) {
-        return res.json({
+        return finalize({
           ...cached.payload,
           servedFromCache: true,
           cacheStale: false,
@@ -114,7 +278,11 @@ app.post('/api/discover', async (req, res, next) => {
         freshChecks: result.freshChecks,
         searchCalls: result.searchCalls,
         searchQueries: result.searchQueries,
-        channels: result.channels
+        channels: result.channels,
+        servedFromCache: false,
+        cacheStale: false,
+        quotaReached: false,
+        cacheAgeSeconds: 0
       };
 
       await saveDiscoveryCache(cacheKey, {
@@ -124,20 +292,13 @@ app.post('/api/discover', async (req, res, next) => {
         payload
       });
 
-      return res.json({
-        ...payload,
-        servedFromCache: false,
-        cacheStale: false,
-        quotaReached: false,
-        cacheAgeSeconds: 0
-      });
+      return finalize(payload);
     } catch (error) {
       if (error?.code !== 'YOUTUBE_QUOTA_EXCEEDED') throw error;
 
-      // Si le quota YouTube est atteint, on ne tente pas de le contourner : on sert le dernier cache disponible.
       const cached = await getDiscoveryCache(cacheKey, { maxAgeHours: 24, allowStale: true });
       if (cached?.payload) {
-        return res.json({
+        return finalize({
           ...cached.payload,
           servedFromCache: true,
           cacheStale: true,
@@ -146,21 +307,28 @@ app.post('/api/discover', async (req, res, next) => {
         });
       }
 
-      const quotaError = new Error('Quota de recherche YouTube atteint. Aucune version en cache n’est disponible pour cette recherche. Réessaie après le reset du quota ou demande une extension de quota YouTube.');
+      const quotaError = new Error('Quota de recherche YouTube atteint. Ton crédit a été rendu automatiquement. Réessaie après le reset du quota.');
       quotaError.status = 429;
       quotaError.code = 'YOUTUBE_SEARCH_QUOTA_EXCEEDED';
       throw quotaError;
     }
   } catch (error) {
+    if (reservation?.searchId) {
+      try { await refundSearchCredit(reservation.searchId, req.user.id, error.code || error.message || 'search_failed'); }
+      catch (refundError) { console.error('Credit refund failed:', refundError); }
+    }
     next(error);
   }
 });
 
-app.post('/api/scan', async (req, res, next) => {
+app.post('/api/scan', requireAuth, async (req, res, next) => {
   try {
     const channelId = String(req.body?.channelId || '').trim();
     const maxVideos = Math.min(Math.max(Number(req.body?.maxVideos || 100), 1), 1000);
     if (!channelId) return res.status(400).json({ error: 'channelId requis.' });
+    if (!(await canUserScanChannel(req.user.id, channelId))) {
+      return res.status(403).json({ error: 'Cette chaîne ne fait pas partie d’une recherche achetée sur ton compte.', code: 'CHANNEL_NOT_PURCHASED' });
+    }
 
     const freshChannel = await getChannel(channelId);
     const knownChannels = await getKnownChannels(10000);
@@ -211,7 +379,7 @@ app.post('/api/scan', async (req, res, next) => {
   }
 });
 
-app.get('/api/channels', async (_req, res, next) => {
+app.get('/api/channels', requirePaidAccess, async (_req, res, next) => {
   try {
     res.json({ channels: await getChannels() });
   } catch (error) {
@@ -219,7 +387,7 @@ app.get('/api/channels', async (_req, res, next) => {
   }
 });
 
-app.get('/api/links', async (req, res, next) => {
+app.get('/api/links', requirePaidAccess, async (req, res, next) => {
   try {
     res.json({
       links: await getLinks({
@@ -250,7 +418,7 @@ function normalizeDomainSearch(value = '') {
   }
 }
 
-app.get('/api/domain-search', async (req, res, next) => {
+app.get('/api/domain-search', requirePaidAccess, async (req, res, next) => {
   try {
     const domain = normalizeDomainSearch(req.query.domain || req.query.q || '');
     if (!domain || !domain.includes('.')) {
@@ -294,7 +462,7 @@ app.get('/api/domain-search', async (req, res, next) => {
   }
 });
 
-app.get('/api/domains', async (req, res, next) => {
+app.get('/api/domains', requirePaidAccess, async (req, res, next) => {
   try {
     res.json({ domains: await getDomainStats(req.query.limit || 100) });
   } catch (error) {
@@ -376,7 +544,7 @@ async function sendDomainTxt(res, { businessOnly, filename }) {
 }
 
 
-app.post('/api/export-search-domains.txt', async (req, res, next) => {
+app.post('/api/export-search-domains.txt', requirePaidAccess, async (req, res, next) => {
   try {
     const channelIds = Array.isArray(req.body?.channelIds) ? req.body.channelIds : [];
     const businessOnly = Boolean(req.body?.businessOnly);
@@ -408,7 +576,7 @@ app.post('/api/export-search-domains.txt', async (req, res, next) => {
   }
 });
 
-app.get('/api/export-domains.txt', async (_req, res, next) => {
+app.get('/api/export-domains.txt', requirePaidAccess, async (_req, res, next) => {
   try {
     await sendDomainTxt(res, {
       businessOnly: false,
@@ -419,7 +587,7 @@ app.get('/api/export-domains.txt', async (_req, res, next) => {
   }
 });
 
-app.get('/api/export-business-domains.txt', async (_req, res, next) => {
+app.get('/api/export-business-domains.txt', requirePaidAccess, async (_req, res, next) => {
   try {
     await sendDomainTxt(res, {
       businessOnly: true,
@@ -430,7 +598,7 @@ app.get('/api/export-business-domains.txt', async (_req, res, next) => {
   }
 });
 
-app.get('/api/export-unique.csv', async (_req, res, next) => {
+app.get('/api/export-unique.csv', requirePaidAccess, async (_req, res, next) => {
   try {
     const links = await getUniqueLinks(100000);
     const headers = [
@@ -473,7 +641,7 @@ app.get('/api/export-unique.csv', async (_req, res, next) => {
   }
 });
 
-app.get('/api/export.csv', async (_req, res, next) => {
+app.get('/api/export.csv', requirePaidAccess, async (_req, res, next) => {
   try {
     const links = await getLinks({ limit: 100000 });
     const headers = ['channel', 'video', 'views', 'published_at', 'domain', 'category', 'affiliate_likelihood', 'url', 'youtube_url'];
@@ -523,7 +691,7 @@ async function bootstrap() {
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`ScanYTB v4 running on port ${PORT}`);
+    console.log(`ScanYTB v5 running on port ${PORT}`);
   });
 }
 

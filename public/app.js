@@ -10,7 +10,10 @@ const state = {
   currentSearchQuery: '',
   currentSearchChannelIds: [],
   linkPage: 1,
-  linkPageSize: 10
+  linkPageSize: 10,
+  user: null,
+  authMode: 'register',
+  pendingSearchPayload: null
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -47,7 +50,13 @@ async function api(path, options = {}) {
     headers: { 'Content-Type': 'application/json', ...(options.headers || {}) }
   });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || `Erreur ${response.status}`);
+  if (!response.ok) {
+    const error = new Error(data.error || `Erreur ${response.status}`);
+    error.status = response.status;
+    error.code = data.code;
+    error.data = data;
+    throw error;
+  }
   return data;
 }
 
@@ -163,46 +172,78 @@ function renderTelemetry(data) {
   $('#teleCache').textContent = exactFmt.format(Number(data.cacheHits || 0));
 }
 
+function collectSearchPayload() {
+  const query = $('#query').value.trim();
+  const minSubscribers = Number($('#minSubscribers').value || 0);
+  const maxSubscribers = Number($('#maxSubscribers').value || 0);
+  if (!query) return null;
+  if (maxSubscribers && maxSubscribers < minSubscribers) {
+    toast('Le maximum d’abonnés doit être supérieur ou égal au minimum.', 'error');
+    return null;
+  }
+  return {
+    query,
+    mode: state.searchMode,
+    maxResults: Number($('#maxResults').value),
+    minSubscribers,
+    maxSubscribers,
+    minVideos: Number($('#minVideos').value)
+  };
+}
+
+function restoreSearchForm(payload) {
+  if (!payload) return;
+  $('#query').value = payload.query || '';
+  $('#maxResults').value = String(payload.maxResults || 50);
+  $('#minSubscribers').value = String(payload.minSubscribers || 0);
+  $('#maxSubscribers').value = String(payload.maxSubscribers || 0);
+  $('#minVideos').value = String(payload.minVideos || 0);
+  setMode(payload.mode || 'deep');
+}
+
 async function discover(event) {
   event.preventDefault();
   if (state.bulkScanning) return;
+  const payload = collectSearchPayload();
+  if (!payload) return;
+  state.pendingSearchPayload = payload;
 
-  const button = $('#discoverBtn');
-  const query = $('#query').value.trim();
-  if (!query) return;
-
-  const minSubscribers = Number($('#minSubscribers').value || 0);
-  const maxSubscribers = Number($('#maxSubscribers').value || 0);
-  if (maxSubscribers && maxSubscribers < minSubscribers) {
-    toast('Le maximum d’abonnés doit être supérieur ou égal au minimum.', 'error');
+  if (!state.user) {
+    openAuthModal('register');
     return;
   }
+  if (Number(state.user.credits || 0) < 1) {
+    openPurchaseModal();
+    return;
+  }
+  await performDiscovery(payload);
+}
 
+async function performDiscovery(payload) {
+  if (!payload || state.bulkScanning) return;
+  const button = $('#discoverBtn');
   button.disabled = true;
   button.classList.add('loading');
-  button.textContent = state.searchMode === 'deep' ? 'Recherche profonde' : 'Recherche rapide';
-  $('#discoverMeta').textContent = state.searchMode === 'deep'
+  button.textContent = payload.mode === 'deep' ? 'Recherche profonde' : 'Recherche rapide';
+  $('#discoverMeta').textContent = payload.mode === 'deep'
     ? 'Plusieurs requêtes YouTube + déduplication + vérification FR…'
     : 'Recherche rapide + vérification FR…';
 
   try {
     const data = await api('/api/discover', {
       method: 'POST',
-      body: JSON.stringify({
-        query,
-        mode: state.searchMode,
-        maxResults: Number($('#maxResults').value),
-        minSubscribers,
-        maxSubscribers,
-        minVideos: Number($('#minVideos').value)
-      })
+      body: JSON.stringify(payload)
     });
 
     state.discoveredChannels = data.channels;
-    state.currentSearchQuery = query;
+    state.currentSearchQuery = payload.query;
     state.linkPage = 1;
     state.currentSearchChannelIds = data.channels.map((channel) => channel.id);
     $('#exportSearchDomainsBtn').disabled = !state.currentSearchChannelIds.length;
+    if (state.user) state.user.credits = Number(data.creditsRemaining ?? state.user.credits ?? 0);
+    state.pendingSearchPayload = null;
+    sessionStorage.removeItem('scanYTB.pendingSearch');
+    renderUserUI();
     renderChannels();
     renderTelemetry(data);
 
@@ -210,22 +251,32 @@ async function discover(event) {
       ? ` · ${data.filteredByMinimum} hors filtres`
       : '';
     const sourceText = data.servedFromCache
-      ? (data.quotaReached ? ' · quota YouTube atteint · résultats du cache' : ' · cache recherche · 0 appel YouTube')
+      ? (data.quotaReached ? ' · quota YouTube atteint · résultats du cache' : ' · cache recherche')
       : '';
     $('#discoverMeta').textContent = `${data.rawResults} résultats YouTube · ${data.uniqueCandidates} chaînes uniques · ${data.count} FR retenues · ${data.rejected} étrangères${minimumText} · ${data.cacheHits} vérifs cache${sourceText}`;
 
     const modeLabel = data.mode === 'deep' ? 'Recherche profonde' : 'Recherche rapide';
     if (data.quotaReached) {
-      toast(`Quota YouTube atteint : résultats déjà enregistrés affichés depuis le cache.`, 'error');
+      toast(`Résultats déjà enregistrés affichés depuis le cache. 1 crédit utilisé.`);
     } else if (data.servedFromCache) {
-      toast(`Résultats réutilisés depuis le cache : aucun quota de recherche consommé.`);
+      toast(`Recherche terminée depuis le cache · 1 crédit utilisé.`);
     } else {
-      toast(`${modeLabel} terminée : ${data.count} chaîne${data.count > 1 ? 's' : ''} FR trouvée${data.count > 1 ? 's' : ''}.`);
+      toast(`${modeLabel} terminée : ${data.count} chaîne${data.count > 1 ? 's' : ''} FR trouvée${data.count > 1 ? 's' : ''} · 1 crédit utilisé.`);
     }
-    refreshStats();
+    await Promise.all([refreshStats(), loadAccountHistory()]);
   } catch (error) {
     $('#discoverMeta').textContent = 'Échec de la recherche.';
-    toast(error.message, 'error');
+    if (error.code === 'NO_CREDITS' || error.status === 402) {
+      await loadSession();
+      openPurchaseModal();
+    } else if (error.code === 'AUTH_REQUIRED' || error.status === 401) {
+      state.user = null;
+      renderUserUI();
+      openAuthModal('login');
+    } else {
+      toast(error.message, 'error');
+      await loadSession();
+    }
   } finally {
     button.disabled = false;
     button.classList.remove('loading');
@@ -588,6 +639,235 @@ async function downloadCurrentSearchDomains(businessOnly) {
   }
 }
 
+function anyModalOpen() {
+  return [...document.querySelectorAll('.modal-backdrop')].some((modal) => !modal.hidden);
+}
+
+function openModal(id) {
+  const modal = $(`#${id}`);
+  if (!modal) return;
+  modal.hidden = false;
+  document.body.classList.add('modal-open');
+}
+
+function closeModal(id) {
+  const modal = $(`#${id}`);
+  if (modal) modal.hidden = true;
+  if (!anyModalOpen()) document.body.classList.remove('modal-open');
+}
+
+function setAuthMode(mode) {
+  state.authMode = mode === 'login' ? 'login' : 'register';
+  $('#authTabLogin')?.classList.toggle('active', state.authMode === 'login');
+  $('#authTabRegister')?.classList.toggle('active', state.authMode === 'register');
+  $('#authTitle').textContent = state.authMode === 'login' ? 'Connecte-toi à ScanYTB' : 'Crée ton compte pour continuer';
+  $('#authSubmit').textContent = state.authMode === 'login' ? 'Se connecter' : 'Créer mon compte';
+  $('#authPassword').autocomplete = state.authMode === 'login' ? 'current-password' : 'new-password';
+  $('#authError').hidden = true;
+}
+
+function openAuthModal(mode = 'register') {
+  setAuthMode(mode);
+  openModal('authModal');
+  window.setTimeout(() => $('#authEmail')?.focus(), 50);
+}
+
+function openPurchaseModal() {
+  if (!state.user) return openAuthModal('register');
+  closeModal('authModal');
+  openModal('purchaseModal');
+}
+
+async function loadSession() {
+  try {
+    const data = await api('/api/auth/session');
+    state.user = data.user || null;
+  } catch {
+    state.user = null;
+  }
+  renderUserUI();
+  return state.user;
+}
+
+function renderUserUI() {
+  const topAccount = $('#accountButton');
+  const heroAccount = $('#heroAccountButton');
+  const creditsButton = $('#creditsButton');
+  if (!state.user) {
+    if (topAccount) topAccount.textContent = 'Se connecter';
+    if (heroAccount) heroAccount.textContent = 'Se connecter';
+    if (creditsButton) creditsButton.hidden = true;
+    return;
+  }
+  const credits = Number(state.user.credits || 0);
+  const label = `${credits} crédit${credits > 1 ? 's' : ''}`;
+  if (topAccount) topAccount.textContent = 'Mon compte';
+  if (heroAccount) heroAccount.textContent = `${label} · Mon compte`;
+  if (creditsButton) {
+    creditsButton.hidden = false;
+    creditsButton.textContent = label;
+  }
+  if ($('#accountEmail')) $('#accountEmail').textContent = state.user.email || '—';
+  if ($('#accountCredits')) $('#accountCredits').textContent = exactFmt.format(credits);
+}
+
+async function handleAuthSubmit(event) {
+  event.preventDefault();
+  const button = $('#authSubmit');
+  const errorBox = $('#authError');
+  button.disabled = true;
+  button.classList.add('loading');
+  errorBox.hidden = true;
+  try {
+    const data = await api(state.authMode === 'login' ? '/api/auth/login' : '/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({ email: $('#authEmail').value.trim(), password: $('#authPassword').value })
+    });
+    state.user = data.user;
+    renderUserUI();
+    closeModal('authModal');
+    toast(state.authMode === 'login' ? 'Connexion réussie.' : 'Compte créé. Bienvenue sur ScanYTB.');
+    if (state.pendingSearchPayload) {
+      if (Number(state.user.credits || 0) > 0) await performDiscovery(state.pendingSearchPayload);
+      else openPurchaseModal();
+    } else {
+      await loadAccountHistory();
+    }
+  } catch (error) {
+    errorBox.textContent = error.message;
+    errorBox.hidden = false;
+  } finally {
+    button.disabled = false;
+    button.classList.remove('loading');
+  }
+}
+
+async function startCheckout() {
+  if (!state.user) return openAuthModal('login');
+  const button = $('#buyCreditButton');
+  button.disabled = true;
+  button.classList.add('loading');
+  try {
+    if (state.pendingSearchPayload) {
+      sessionStorage.setItem('scanYTB.pendingSearch', JSON.stringify(state.pendingSearchPayload));
+    }
+    const data = await api('/api/billing/checkout', { method: 'POST', body: '{}' });
+    window.location.href = data.url;
+  } catch (error) {
+    toast(error.message, 'error');
+    button.disabled = false;
+    button.classList.remove('loading');
+  }
+}
+
+function formatHistoryDate(value) {
+  if (!value) return '—';
+  try { return new Intl.DateTimeFormat('fr-FR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value)); }
+  catch { return '—'; }
+}
+
+async function loadAccountHistory() {
+  const container = $('#accountHistory');
+  if (!container || !state.user) return;
+  try {
+    const data = await api('/api/account/history?limit=30');
+    const searches = data.searches || [];
+    if (!searches.length) {
+      container.innerHTML = '<div class="history-empty">Aucune recherche pour le moment.</div>';
+      return;
+    }
+    container.innerHTML = searches.map((search) => {
+      const count = Number(search.resultSummary?.count || 0);
+      const statusLabel = search.status === 'completed' ? 'terminée' : search.status === 'refunded' ? 'remboursée' : search.status;
+      return `<div class="history-row">
+        <div class="history-main"><strong>${escapeHtml(search.query)} <span class="history-status ${escapeHtml(search.status)}">${escapeHtml(statusLabel)}</span></strong><span>${escapeHtml(formatHistoryDate(search.createdAt))} · ${escapeHtml(search.mode === 'deep' ? 'Profonde' : 'Rapide')}</span></div>
+        <div class="history-count">${count ? `${exactFmt.format(count)} chaîne${count > 1 ? 's' : ''}` : '—'}</div>
+        ${search.status === 'completed' ? `<button class="history-open" type="button" data-history-id="${search.id}">Revoir</button>` : ''}
+      </div>`;
+    }).join('');
+    container.querySelectorAll('[data-history-id]').forEach((button) => {
+      button.addEventListener('click', () => reopenHistorySearch(button.dataset.historyId));
+    });
+  } catch (error) {
+    container.innerHTML = `<div class="history-empty">${escapeHtml(error.message)}</div>`;
+  }
+}
+
+async function openAccountModal() {
+  if (!state.user) return openAuthModal('login');
+  renderUserUI();
+  openModal('accountModal');
+  await loadAccountHistory();
+}
+
+async function reopenHistorySearch(searchId) {
+  try {
+    const data = await api(`/api/account/searches/${encodeURIComponent(searchId)}`);
+    if (!data.payload?.channels) throw new Error('Ces résultats ne sont plus disponibles dans le cache.');
+    const payload = data.payload;
+    state.discoveredChannels = payload.channels || [];
+    state.currentSearchQuery = data.search.query || payload.query || '';
+    state.currentSearchChannelIds = state.discoveredChannels.map((channel) => channel.id);
+    $('#exportSearchDomainsBtn').disabled = !state.currentSearchChannelIds.length;
+    restoreSearchForm({ query: data.search.query, mode: data.search.mode, ...(data.search.filters || {}) });
+    renderChannels();
+    renderTelemetry(payload);
+    $('#discoverMeta').textContent = `Historique · ${payload.count || state.discoveredChannels.length} chaînes FR · recherche du ${formatHistoryDate(data.search.createdAt)}`;
+    closeModal('accountModal');
+    $('#discovery')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (error) {
+    toast(error.message, 'error');
+  }
+}
+
+async function logout() {
+  try { await api('/api/auth/logout', { method: 'POST', body: '{}' }); } catch {}
+  state.user = null;
+  state.discoveredChannels = [];
+  state.currentSearchChannelIds = [];
+  renderUserUI();
+  renderChannels();
+  closeModal('accountModal');
+  toast('Tu es déconnecté.');
+}
+
+async function handlePaymentReturn() {
+  const params = new URLSearchParams(window.location.search);
+  const payment = params.get('payment');
+  const sessionId = params.get('session_id');
+  if (!payment) return;
+
+  history.replaceState({}, '', window.location.pathname + window.location.hash);
+  if (payment === 'cancelled') {
+    sessionStorage.removeItem('scanYTB.pendingSearch');
+    state.pendingSearchPayload = null;
+    toast('Paiement annulé. Aucun débit.', 'error');
+    return;
+  }
+  if (payment !== 'success' || !sessionId || !state.user) return;
+
+  try {
+    const result = await api('/api/billing/verify-session', {
+      method: 'POST',
+      body: JSON.stringify({ sessionId })
+    });
+    state.user = result.user || state.user;
+    renderUserUI();
+    if (!result.paid) throw new Error('Le paiement n’est pas encore confirmé par Stripe.');
+    toast('Paiement confirmé : +1 crédit ajouté.');
+    const pendingRaw = sessionStorage.getItem('scanYTB.pendingSearch');
+    if (pendingRaw) {
+      sessionStorage.removeItem('scanYTB.pendingSearch');
+      const pending = JSON.parse(pendingRaw);
+      state.pendingSearchPayload = pending;
+      restoreSearchForm(pending);
+      if (Number(state.user.credits || 0) > 0) await performDiscovery(pending);
+    }
+  } catch (error) {
+    toast(error.message, 'error');
+  }
+}
+
 function setMode(mode) {
   state.searchMode = mode === 'rapid' ? 'rapid' : 'deep';
   $('#searchMode').value = state.searchMode;
@@ -603,6 +883,26 @@ function setMode(mode) {
 }
 
 $('#discoverForm').addEventListener('submit', discover);
+$('#authForm')?.addEventListener('submit', handleAuthSubmit);
+$('#authTabLogin')?.addEventListener('click', () => setAuthMode('login'));
+$('#authTabRegister')?.addEventListener('click', () => setAuthMode('register'));
+$('#buyCreditButton')?.addEventListener('click', startCheckout);
+$('#accountButton')?.addEventListener('click', openAccountModal);
+$('#heroAccountButton')?.addEventListener('click', openAccountModal);
+$('#creditsButton')?.addEventListener('click', openAccountModal);
+$('#accountBuyCredit')?.addEventListener('click', () => {
+  state.pendingSearchPayload = null;
+  sessionStorage.removeItem('scanYTB.pendingSearch');
+  closeModal('accountModal');
+  openPurchaseModal();
+});
+$('#logoutButton')?.addEventListener('click', logout);
+document.querySelectorAll('[data-close-modal]').forEach((button) => {
+  button.addEventListener('click', () => closeModal(button.dataset.closeModal));
+});
+['authModal', 'purchaseModal', 'accountModal'].forEach((id) => {
+  $(`#${id}`)?.addEventListener('click', (event) => { if (event.target.id === id) closeModal(id); });
+});
 $('#scanAllBtn').addEventListener('click', scanAllChannels);
 $('#linksPrevPage')?.addEventListener('click', () => {
   if (state.linkPage <= 1) return;
@@ -656,9 +956,11 @@ const focusMainSearch = () => {
 
 $('#topSearchButton')?.addEventListener('click', focusMainSearch);
 document.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape' && !$('#scanCompleteModal')?.hidden) {
-    closeScanCompleteModal();
-    return;
+  if (event.key === 'Escape') {
+    if (!$('#scanCompleteModal')?.hidden) { closeScanCompleteModal(); return; }
+    for (const id of ['authModal', 'purchaseModal', 'accountModal']) {
+      if (!$(`#${id}`)?.hidden) { closeModal(id); return; }
+    }
   }
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
     event.preventDefault();
@@ -673,5 +975,17 @@ document.querySelectorAll('.nav-item').forEach((item) => {
   });
 });
 
+
+document.querySelectorAll('a.export-card').forEach((link) => {
+  link.addEventListener('click', (event) => {
+    if (!state.user) {
+      event.preventDefault();
+      openAuthModal('login');
+    }
+  });
+});
 setMode('deep');
-await Promise.all([loadHealth(), refreshStats(), loadLinks(), loadDomains()]);
+await loadSession();
+await handlePaymentReturn();
+await Promise.all([loadHealth(), refreshStats()]);
+if (state.user) await Promise.all([loadLinks(), loadDomains(), loadAccountHistory()]);
