@@ -1243,3 +1243,90 @@ th { background: #0d1218; }
   color: var(--orange-2) !important;
   background: linear-gradient(135deg, rgba(255,116,23,.12), rgba(255,116,23,.035)) !important;
 }
+
+/* V5.2.3 — correctif desktop : aucune collision entre le tableau chaînes et Top domaines */
+@media (min-width: 921px) {
+  .dashboard-grid {
+    grid-template-columns: minmax(0, 1fr) 300px;
+    gap: 16px;
+  }
+
+  .discovery-panel,
+  .domains-panel {
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .channel-table-head,
+  .channel-card {
+    width: 100%;
+    max-width: 100%;
+    grid-template-columns: minmax(220px, 1fr) 74px 58px 102px 158px;
+    gap: 8px;
+  }
+
+  .channel-primary,
+  .channel-info,
+  .channel-name-row,
+  .channel-name,
+  .channel-actions {
+    min-width: 0;
+  }
+
+  .channel-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .channel-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: minmax(78px, 92px) minmax(64px, 1fr);
+    align-items: center;
+    justify-content: stretch;
+    gap: 6px;
+  }
+
+  .channel-actions .scan-select,
+  .channel-actions .button.small {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .channel-actions .button.small {
+    padding-inline: 8px;
+  }
+
+  .domains-panel .section-head.compact {
+    gap: 10px;
+  }
+
+  .domains-panel .section-head.compact > div {
+    min-width: 0;
+  }
+
+  .domains-panel .text-link {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    font-size: 8px;
+  }
+}
+
+@media (min-width: 921px) and (max-width: 1320px) {
+  .dashboard-grid {
+    grid-template-columns: minmax(0, 1fr) 270px;
+    gap: 12px;
+  }
+
+  .channel-table-head,
+  .channel-card {
+    grid-template-columns: minmax(190px, 1fr) 66px 54px 94px 148px;
+    gap: 6px;
+  }
+
+  .channel-actions {
+    grid-template-columns: minmax(72px, 84px) minmax(60px, 1fr);
+    gap: 5px;
+  }
+}
