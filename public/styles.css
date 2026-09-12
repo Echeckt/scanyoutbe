@@ -1225,3 +1225,18 @@ th { background: #0d1218; }
   .history-count { grid-column: 1; }
   .history-open { grid-column: 2; grid-row: 1 / span 2; }
 }
+
+
+/* V5.2 — compte administrateur */
+.admin-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 4px 8px; border: 1px solid rgba(255,116,23,.34); border-radius: 999px;
+  color: var(--orange-2); background: rgba(255,116,23,.09);
+  font-size: 8px; font-weight: 900; letter-spacing: .09em;
+}
+.account-title-line { display: flex; align-items: center; gap: 8px; }
+.admin-credit-pill {
+  border-color: rgba(255,116,23,.36) !important;
+  color: var(--orange-2) !important;
+  background: linear-gradient(135deg, rgba(255,116,23,.12), rgba(255,116,23,.035)) !important;
+}

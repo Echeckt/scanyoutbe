@@ -212,7 +212,7 @@ async function discover(event) {
     openAuthModal('register');
     return;
   }
-  if (Number(state.user.credits || 0) < 1) {
+  if (!state.user.isAdmin && Number(state.user.credits || 0) < 1) {
     openPurchaseModal();
     return;
   }
@@ -240,7 +240,7 @@ async function performDiscovery(payload) {
     state.linkPage = 1;
     state.currentSearchChannelIds = data.channels.map((channel) => channel.id);
     $('#exportSearchDomainsBtn').disabled = !state.currentSearchChannelIds.length;
-    if (state.user) state.user.credits = Number(data.creditsRemaining ?? state.user.credits ?? 0);
+    if (state.user && !state.user.isAdmin) state.user.credits = Number(data.creditsRemaining ?? state.user.credits ?? 0);
     state.pendingSearchPayload = null;
     sessionStorage.removeItem('scanYTB.pendingSearch');
     renderUserUI();
@@ -256,12 +256,13 @@ async function performDiscovery(payload) {
     $('#discoverMeta').textContent = `${data.rawResults} résultats YouTube · ${data.uniqueCandidates} chaînes uniques · ${data.count} FR retenues · ${data.rejected} étrangères${minimumText} · ${data.cacheHits} vérifs cache${sourceText}`;
 
     const modeLabel = data.mode === 'deep' ? 'Recherche profonde' : 'Recherche rapide';
+    const creditSuffix = state.user?.isAdmin ? ' · compte admin, aucun crédit débité.' : ' · 1 crédit utilisé.';
     if (data.quotaReached) {
-      toast(`Résultats déjà enregistrés affichés depuis le cache. 1 crédit utilisé.`);
+      toast(`Résultats déjà enregistrés affichés depuis le cache${creditSuffix}`);
     } else if (data.servedFromCache) {
-      toast(`Recherche terminée depuis le cache · 1 crédit utilisé.`);
+      toast(`Recherche terminée depuis le cache${creditSuffix}`);
     } else {
-      toast(`${modeLabel} terminée : ${data.count} chaîne${data.count > 1 ? 's' : ''} FR trouvée${data.count > 1 ? 's' : ''} · 1 crédit utilisé.`);
+      toast(`${modeLabel} terminée : ${data.count} chaîne${data.count > 1 ? 's' : ''} FR trouvée${data.count > 1 ? 's' : ''}${creditSuffix}`);
     }
     await Promise.all([refreshStats(), loadAccountHistory()]);
   } catch (error) {
@@ -674,6 +675,7 @@ function openAuthModal(mode = 'register') {
 
 function openPurchaseModal() {
   if (!state.user) return openAuthModal('register');
+  if (state.user.isAdmin) return;
   closeModal('authModal');
   openModal('purchaseModal');
 }
@@ -696,19 +698,38 @@ function renderUserUI() {
   if (!state.user) {
     if (topAccount) topAccount.textContent = 'Se connecter';
     if (heroAccount) heroAccount.textContent = 'Se connecter';
-    if (creditsButton) creditsButton.hidden = true;
+    if (creditsButton) {
+      creditsButton.hidden = true;
+      creditsButton.classList.remove('admin-credit-pill');
+    }
+    if ($('#accountAdminBadge')) $('#accountAdminBadge').hidden = true;
+    if ($('#accountCreditLabel')) $('#accountCreditLabel').textContent = 'crédit';
+    if ($('#accountBuyCredit')) $('#accountBuyCredit').hidden = false;
+    if ($('#searchPriceNote')) {
+      $('#searchPriceNote').innerHTML = '<span>1 recherche = 1 crédit</span><strong>4,99 €</strong><small>Le crédit est rendu automatiquement si la recherche échoue.</small>';
+    }
     return;
   }
   const credits = Number(state.user.credits || 0);
-  const label = `${credits} crédit${credits > 1 ? 's' : ''}`;
-  if (topAccount) topAccount.textContent = 'Mon compte';
-  if (heroAccount) heroAccount.textContent = `${label} · Mon compte`;
+  const admin = Boolean(state.user.isAdmin);
+  const label = admin ? '∞ crédits' : `${credits} crédit${credits > 1 ? 's' : ''}`;
+  if (topAccount) topAccount.textContent = admin ? 'Admin' : 'Mon compte';
+  if (heroAccount) heroAccount.textContent = admin ? 'Admin · Crédits illimités' : `${label} · Mon compte`;
   if (creditsButton) {
     creditsButton.hidden = false;
-    creditsButton.textContent = label;
+    creditsButton.textContent = admin ? '∞ crédits' : label;
+    creditsButton.classList.toggle('admin-credit-pill', admin);
   }
   if ($('#accountEmail')) $('#accountEmail').textContent = state.user.email || '—';
-  if ($('#accountCredits')) $('#accountCredits').textContent = exactFmt.format(credits);
+  if ($('#accountCredits')) $('#accountCredits').textContent = admin ? '∞' : exactFmt.format(credits);
+  if ($('#accountCreditLabel')) $('#accountCreditLabel').textContent = admin ? 'illimités' : 'crédit';
+  if ($('#accountAdminBadge')) $('#accountAdminBadge').hidden = !admin;
+  if ($('#accountBuyCredit')) $('#accountBuyCredit').hidden = admin;
+  if ($('#searchPriceNote')) {
+    $('#searchPriceNote').innerHTML = admin
+      ? '<span>Compte administrateur</span><strong>∞</strong><small>Recherches et accès illimités.</small>'
+      : '<span>1 recherche = 1 crédit</span><strong>4,99 €</strong><small>Le crédit est rendu automatiquement si la recherche échoue.</small>';
+  }
 }
 
 async function handleAuthSubmit(event) {
@@ -728,7 +749,7 @@ async function handleAuthSubmit(event) {
     closeModal('authModal');
     toast(state.authMode === 'login' ? 'Connexion réussie.' : 'Compte créé. Bienvenue sur ScanYTB.');
     if (state.pendingSearchPayload) {
-      if (Number(state.user.credits || 0) > 0) await performDiscovery(state.pendingSearchPayload);
+      if (state.user.isAdmin || Number(state.user.credits || 0) > 0) await performDiscovery(state.pendingSearchPayload);
       else openPurchaseModal();
     } else {
       await loadAccountHistory();
@@ -845,7 +866,7 @@ async function handlePaymentReturn() {
     toast('Paiement annulé. Aucun crédit consommé.', 'error');
     return;
   }
-  if (payment !== 'success' || !state.user) return;
+  if (payment !== 'success' || !state.user || state.user.isAdmin) return;
 
   try {
     let result = null;
@@ -918,6 +939,7 @@ $('#accountButton')?.addEventListener('click', openAccountModal);
 $('#heroAccountButton')?.addEventListener('click', openAccountModal);
 $('#creditsButton')?.addEventListener('click', openAccountModal);
 $('#accountBuyCredit')?.addEventListener('click', () => {
+  if (state.user?.isAdmin) return;
   state.pendingSearchPayload = null;
   sessionStorage.removeItem('scanYTB.pendingSearch');
   closeModal('accountModal');

@@ -1,4 +1,4 @@
-# ScanYTB V5.1 — Dodo Payments
+# ScanYTB V5.2 — Dodo Payments + compte admin
 
 ScanYTB analyse les chaînes YouTube françaises et extrait les liens présents dans les descriptions. Cette version ajoute les comptes utilisateurs, les crédits de recherche et le paiement unique via Dodo Payments.
 
@@ -14,10 +14,12 @@ ScanYTB analyse les chaînes YouTube françaises et extrait les liens présents 
 - Si la recherche échoue techniquement avant résultat, le crédit est automatiquement rendu.
 - Historique des recherches par utilisateur.
 - Les scans de chaînes et exports restent liés aux recherches achetées.
+- Compte administrateur avec recherches, scans, exports et recherche NDD illimités.
+- L’admin n’est jamais débité et n’a pas besoin d’acheter de crédit.
 
 ## Variables Railway
 
-Les variables déjà configurées sont suffisantes :
+Garde tes variables actuelles et ajoute `ADMIN_EMAIL` :
 
 ```env
 APP_URL=https://scan-ytb.com
@@ -26,6 +28,7 @@ YOUTUBE_API_KEY=...
 DODO_PAYMENTS_API_KEY=...
 DODO_PAYMENTS_WEBHOOK_KEY=...
 DODO_PRODUCT_ID=pdt_0NnPPhnQCfvPY1npwmxNm
+ADMIN_EMAIL=ton-email@exemple.com
 ```
 
 Optionnel :
@@ -35,6 +38,34 @@ DODO_PAYMENTS_ENVIRONMENT=live_mode
 ```
 
 Si cette variable est absente, ScanYTB utilise `live_mode`. Pour tester avec le sandbox Dodo, utilise `test_mode` avec une clé, un produit et un webhook créés en mode test.
+
+
+## Compte administrateur
+
+Ajoute dans Railway :
+
+```env
+ADMIN_EMAIL=ton-email@exemple.com
+```
+
+Connecte-toi ensuite à ScanYTB avec **exactement cette adresse e-mail**. Le compte est reconnu comme administrateur automatiquement, même si le compte existait déjà avant la V5.2.
+
+Un compte admin affiche `∞ crédits` et bénéficie de :
+
+- recherches illimitées ;
+- aucun débit de crédit ;
+- scan de toutes les chaînes ;
+- accès aux exports ;
+- accès à la recherche globale NDD ;
+- historique de ses propres recherches.
+
+Tu peux autoriser plusieurs admins en séparant les e-mails par des virgules :
+
+```env
+ADMIN_EMAIL=toi@exemple.com,associe@exemple.com
+```
+
+La base ajoute aussi une colonne `users.is_admin` pour permettre plus tard de promouvoir manuellement d’autres comptes si besoin.
 
 ## Webhook Dodo
 

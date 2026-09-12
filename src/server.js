@@ -162,7 +162,7 @@ async function requirePaidAccess(req, res, next) {
   try {
     const user = await getUserFromRequest(req);
     if (!user) return res.status(401).json({ error: 'Connecte-toi pour continuer.', code: 'AUTH_REQUIRED' });
-    if (!(await hasCompletedSearch(user.id))) {
+    if (!user.isAdmin && !(await hasCompletedSearch(user.id))) {
       return res.status(403).json({ error: 'Lance d’abord une recherche pour accéder à ces données.', code: 'SEARCH_REQUIRED' });
     }
     req.user = user;
@@ -225,6 +225,9 @@ app.get('/api/account/searches/:id', requireAuth, async (req, res, next) => {
 
 app.post('/api/billing/checkout', requireAuth, async (req, res, next) => {
   try {
+    if (req.user.isAdmin) {
+      return res.status(400).json({ error: 'Ton compte administrateur dispose déjà de recherches illimitées.', code: 'ADMIN_UNLIMITED' });
+    }
     if (!DODO_API_KEY || !DODO_PRODUCT_ID) {
       return res.status(503).json({ error: 'Le paiement Dodo Payments n’est pas encore configuré.', code: 'DODO_NOT_CONFIGURED' });
     }
@@ -286,11 +289,12 @@ app.post('/api/billing/verify-payment', requireAuth, async (req, res, next) => {
 app.get('/api/health', async (_req, res) => {
   res.json({
     ok: true,
-    version: '5.1.0',
+    version: '5.2.0',
     youtubeKeyConfigured: Boolean(process.env.YOUTUBE_API_KEY),
     databaseConfigured: hasDatabase(),
     dodoConfigured: dodoConfigured(),
     dodoEnvironment: DODO_ENVIRONMENT,
+    adminConfigured: Boolean(String(process.env.ADMIN_EMAIL || '').trim()),
     timestamp: new Date().toISOString()
   });
 });
@@ -426,7 +430,7 @@ app.post('/api/scan', requireAuth, async (req, res, next) => {
     const channelId = String(req.body?.channelId || '').trim();
     const maxVideos = Math.min(Math.max(Number(req.body?.maxVideos || 100), 1), 1000);
     if (!channelId) return res.status(400).json({ error: 'channelId requis.' });
-    if (!(await canUserScanChannel(req.user.id, channelId))) {
+    if (!req.user.isAdmin && !(await canUserScanChannel(req.user.id, channelId))) {
       return res.status(403).json({ error: 'Cette chaîne ne fait pas partie d’une recherche achetée sur ton compte.', code: 'CHANNEL_NOT_PURCHASED' });
     }
 

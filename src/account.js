@@ -5,6 +5,22 @@ import { getPool, hasDatabase } from './db.js';
 const SESSION_COOKIE = 'scan_ytb_session';
 const SESSION_DAYS = 30;
 
+function configuredAdminEmails() {
+  return String(process.env.ADMIN_EMAIL || '')
+    .split(',')
+    .map((email) => normalizeEmail(email))
+    .filter(Boolean);
+}
+
+function isConfiguredAdminEmail(email) {
+  const normalized = normalizeEmail(email);
+  return Boolean(normalized && configuredAdminEmails().includes(normalized));
+}
+
+function isAdminRow(row) {
+  return Boolean(row?.is_admin || isConfiguredAdminEmail(row?.email));
+}
+
 function requireDb() {
   if (!hasDatabase()) {
     const error = new Error('Le système de compte nécessite PostgreSQL.');
@@ -42,6 +58,7 @@ export function publicUser(row) {
     id: row.id,
     email: row.email,
     credits: Number(row.credits || 0),
+    isAdmin: isAdminRow(row),
     createdAt: row.created_at || row.createdAt || null
   };
 }
@@ -66,7 +83,7 @@ export async function createUser(emailInput, password) {
     const result = await db.query(`
       INSERT INTO users (id, email, password_hash)
       VALUES ($1,$2,$3)
-      RETURNING id, email, credits, created_at
+      RETURNING id, email, credits, is_admin, created_at
     `, [id, email, passwordHash]);
     return publicUser(result.rows[0]);
   } catch (error) {
@@ -84,7 +101,7 @@ export async function authenticateUser(emailInput, password) {
   const db = requireDb();
   const email = normalizeEmail(emailInput);
   const result = await db.query(`
-    SELECT id, email, password_hash, credits, created_at
+    SELECT id, email, password_hash, credits, is_admin, created_at
     FROM users
     WHERE email = $1
     LIMIT 1
@@ -135,7 +152,7 @@ export async function getUserFromRequest(req) {
   const token = readCookie(req, SESSION_COOKIE);
   if (!token) return null;
   const result = await getPool().query(`
-    SELECT u.id, u.email, u.credits, u.created_at
+    SELECT u.id, u.email, u.credits, u.is_admin, u.created_at
     FROM user_sessions s
     JOIN users u ON u.id = s.user_id
     WHERE s.token_hash = $1 AND s.expires_at > NOW()
@@ -146,7 +163,7 @@ export async function getUserFromRequest(req) {
 
 export async function getUserById(userId) {
   const db = requireDb();
-  const result = await db.query('SELECT id, email, credits, created_at FROM users WHERE id = $1 LIMIT 1', [userId]);
+  const result = await db.query('SELECT id, email, credits, is_admin, created_at FROM users WHERE id = $1 LIMIT 1', [userId]);
   return publicUser(result.rows[0]);
 }
 
@@ -155,33 +172,59 @@ export async function reserveSearchCredit(userId, search) {
   const client = await db.connect();
   try {
     await client.query('BEGIN');
-    const debit = await client.query(`
-      UPDATE users
-      SET credits = credits - 1, updated_at = NOW()
-      WHERE id = $1 AND credits > 0
-      RETURNING credits
+
+    const userResult = await client.query(`
+      SELECT id, email, credits, is_admin
+      FROM users
+      WHERE id = $1
+      FOR UPDATE
     `, [userId]);
-    if (!debit.rowCount) {
-      const error = new Error('Tu n’as plus de crédit de recherche.');
-      error.status = 402;
-      error.code = 'NO_CREDITS';
+    const user = userResult.rows[0];
+    if (!user) {
+      const error = new Error('Compte introuvable.');
+      error.status = 401;
+      error.code = 'AUTH_REQUIRED';
       throw error;
+    }
+
+    const admin = isAdminRow(user);
+    let balance = Number(user.credits || 0);
+
+    if (!admin) {
+      if (balance < 1) {
+        const error = new Error('Tu n’as plus de crédit de recherche.');
+        error.status = 402;
+        error.code = 'NO_CREDITS';
+        throw error;
+      }
+      const debit = await client.query(`
+        UPDATE users
+        SET credits = credits - 1, updated_at = NOW()
+        WHERE id = $1
+        RETURNING credits
+      `, [userId]);
+      balance = Number(debit.rows[0]?.credits || 0);
     }
 
     const result = await client.query(`
       INSERT INTO user_searches (user_id, query, mode, filters, cache_key, status, credit_charged)
-      VALUES ($1,$2,$3,$4::jsonb,$5,'pending',TRUE)
+      VALUES ($1,$2,$3,$4::jsonb,$5,'pending',$6)
       RETURNING id, created_at
-    `, [userId, search.query, search.mode, JSON.stringify(search.filters || {}), search.cacheKey || null]);
+    `, [userId, search.query, search.mode, JSON.stringify(search.filters || {}), search.cacheKey || null, !admin]);
 
-    const balance = Number(debit.rows[0].credits || 0);
-    await client.query(`
-      INSERT INTO credit_transactions (user_id, delta, balance_after, type, reference, metadata)
-      VALUES ($1,-1,$2,'search_debit',$3,$4::jsonb)
-    `, [userId, balance, String(result.rows[0].id), JSON.stringify({ query: search.query, mode: search.mode })]);
+    if (!admin) {
+      await client.query(`
+        INSERT INTO credit_transactions (user_id, delta, balance_after, type, reference, metadata)
+        VALUES ($1,-1,$2,'search_debit',$3,$4::jsonb)
+      `, [userId, balance, String(result.rows[0].id), JSON.stringify({ query: search.query, mode: search.mode })]);
+    }
 
     await client.query('COMMIT');
-    return { searchId: Number(result.rows[0].id), creditsRemaining: balance };
+    return {
+      searchId: Number(result.rows[0].id),
+      creditsRemaining: balance,
+      unlimited: admin
+    };
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;
@@ -235,7 +278,18 @@ export async function refundSearchCredit(searchId, userId, reason = 'search_fail
       FOR UPDATE
     `, [searchId, userId]);
     const row = search.rows[0];
-    if (!row || !row.credit_charged || row.status !== 'pending') {
+    if (!row || row.status !== 'pending') {
+      await client.query('COMMIT');
+      return false;
+    }
+
+    // Les recherches admin n'ont jamais consommé de crédit. On clôture simplement la recherche en échec.
+    if (!row.credit_charged) {
+      await client.query(`
+        UPDATE user_searches
+        SET status = 'failed', failure_reason = $3, completed_at = NOW()
+        WHERE id = $1 AND user_id = $2
+      `, [searchId, userId, reason]);
       await client.query('COMMIT');
       return false;
     }
@@ -266,6 +320,12 @@ export async function refundSearchCredit(searchId, userId, reason = 'search_fail
   } finally {
     client.release();
   }
+}
+
+export async function isAdminUser(userId) {
+  const db = requireDb();
+  const result = await db.query('SELECT email, is_admin FROM users WHERE id = $1 LIMIT 1', [userId]);
+  return isAdminRow(result.rows[0]);
 }
 
 export async function canUserScanChannel(userId, channelId) {

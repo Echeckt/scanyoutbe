@@ -82,6 +82,7 @@ export async function initDatabase() {
       email TEXT NOT NULL UNIQUE,
       password_hash TEXT NOT NULL,
       credits INTEGER NOT NULL DEFAULT 0 CHECK (credits >= 0),
+      is_admin BOOLEAN NOT NULL DEFAULT FALSE,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
@@ -162,6 +163,7 @@ export async function initDatabase() {
     ALTER TABLE channels ADD COLUMN IF NOT EXISTS last_verified_at TIMESTAMPTZ;
     ALTER TABLE videos ADD COLUMN IF NOT EXISTS view_count BIGINT;
     ALTER TABLE videos ADD COLUMN IF NOT EXISTS view_count_updated_at TIMESTAMPTZ;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT FALSE;
 
     CREATE INDEX IF NOT EXISTS idx_links_channel_id ON links(channel_id);
     CREATE INDEX IF NOT EXISTS idx_links_domain ON links(domain);

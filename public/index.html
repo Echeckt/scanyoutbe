@@ -173,7 +173,7 @@
                 </div>
               </div>
             </form>
-            <div class="search-price-note"><span>1 recherche = 1 crédit</span><strong>4,99 $</strong><small>Le crédit est rendu automatiquement si la recherche échoue.</small></div>
+            <div id="searchPriceNote" class="search-price-note"><span>1 recherche = 1 crédit</span><strong>4,99 €</strong><small>Le crédit est rendu automatiquement si la recherche échoue.</small></div>
           </div>
 
           <div class="hero-visual" aria-hidden="true">
@@ -404,11 +404,11 @@
       <button class="modal-close" type="button" data-close-modal="accountModal" aria-label="Fermer">×</button>
       <div class="account-header">
         <div>
-          <div class="eyebrow">MON COMPTE</div>
+          <div class="account-title-line"><div class="eyebrow">MON COMPTE</div><span id="accountAdminBadge" class="admin-badge" hidden>ADMIN</span></div>
           <h2 id="accountTitle">ScanYTB</h2>
           <p id="accountEmail">—</p>
         </div>
-        <div class="account-credit-box"><strong id="accountCredits">0</strong><span>crédit</span></div>
+        <div class="account-credit-box"><strong id="accountCredits">0</strong><span id="accountCreditLabel">crédit</span></div>
       </div>
       <div class="account-actions">
         <button id="accountBuyCredit" class="button primary" type="button">Acheter 1 crédit · 4,99 €</button>
