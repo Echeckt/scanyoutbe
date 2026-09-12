@@ -289,7 +289,7 @@ app.post('/api/billing/verify-payment', requireAuth, async (req, res, next) => {
 app.get('/api/health', async (_req, res) => {
   res.json({
     ok: true,
-    version: '5.2.0',
+    version: '5.4.0',
     youtubeKeyConfigured: Boolean(process.env.YOUTUBE_API_KEY),
     databaseConfigured: hasDatabase(),
     dodoConfigured: dodoConfigured(),
@@ -306,7 +306,7 @@ app.post('/api/discover', requireAuth, async (req, res, next) => {
     if (!query) return res.status(400).json({ error: 'Entre un mot-clé de recherche.' });
 
     const mode = req.body?.mode === 'deep' ? 'deep' : 'rapid';
-    const maxResults = Math.min(Math.max(Number(req.body?.maxResults || 50), 1), 200);
+    const maxResults = Math.min(Math.max(Number(req.body?.maxResults || 50), 1), 500);
     const minSubscribers = Math.max(Number(req.body?.minSubscribers || 0), 0);
     const maxSubscribers = Math.max(Number(req.body?.maxSubscribers || 0), 0);
     const minVideos = Math.max(Number(req.body?.minVideos || 0), 0);
@@ -315,8 +315,16 @@ app.post('/api/discover', requireAuth, async (req, res, next) => {
       return res.status(400).json({ error: 'Le maximum d’abonnés doit être supérieur ou égal au minimum.' });
     }
 
-    const cacheParams = { mode, maxResults, minSubscribers, maxSubscribers, minVideos };
+    // La découverte sert uniquement aux niches / mots-clés. Les recherches NDD restent disponibles dans la section Liens.
+    const normalizedInput = query.toLowerCase().replace(/^https?:\/\//, '').split('/')[0].split(':')[0].replace(/^www\./, '');
+    if (!query.includes(' ') && /^[a-z0-9](?:[a-z0-9-]{0,62}\.)+[a-z]{2,63}$/i.test(normalizedInput)) {
+      return res.status(400).json({
+        error: 'Entre une niche ou un mot-clé (ex. dropshipping, Shopify, WordPress), pas un nom de domaine.'
+      });
+    }
     const normalizedQuery = query.toLowerCase().replace(/\s+/g, ' ').trim();
+    // Versionne le cache afin de ne jamais resservir les anciennes recherches étroites de la V5.3.
+    const cacheParams = { mode, maxResults, minSubscribers, maxSubscribers, minVideos, discoveryVersion: 'broad-v2' };
     const cacheKey = crypto
       .createHash('sha256')
       .update(JSON.stringify({ query: normalizedQuery, ...cacheParams }))

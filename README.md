@@ -1,4 +1,4 @@
-# ScanYTB V5.2.3 — Dodo Payments + compte admin
+# ScanYTB V5.4 — Dodo Payments + compte admin + recherche NDD exacte
 
 ScanYTB analyse les chaînes YouTube françaises et extrait les liens présents dans les descriptions. Cette version ajoute les comptes utilisateurs, les crédits de recherche et le paiement unique via Dodo Payments.
 
@@ -107,3 +107,38 @@ Le retour navigateur n’est jamais considéré comme preuve de paiement : ScanY
 ## V5.2.3
 - Correction visuelle : le bouton d’achat de crédit est désormais strictement masqué pour les comptes administrateurs.
 - Ajout d’une règle globale `[hidden] { display: none !important; }` pour éviter qu’un style `display:flex` ne réaffiche un élément masqué.
+
+
+## V5.4 — Mode domaine exact
+
+La barre principale détecte maintenant automatiquement un nom de domaine (`mortode.com`, `https://mortode.com`, etc.).
+
+Dans ce cas ScanYTB n'utilise plus les variantes de mots-clés du mode classique :
+
+- **Rapide** : inspecte jusqu'à 50 résultats vidéo YouTube pour le NDD ;
+- **Profonde** : parcourt jusqu'à 4 pages, soit 200 résultats vidéo ;
+- récupère ensuite la description complète de chaque vidéo ;
+- ne conserve une vidéo que si le domaine demandé est **réellement présent dans sa description** ;
+- accepte le domaine racine, `www.` et les sous-domaines ;
+- rejette les faux positifs comme `notmortode.com` ou `mortode.com.evil.com` ;
+- déduit les chaînes à partir de ces vidéos exactes ;
+- applique ensuite les filtres abonnés/vidéos et la vérification francophone ;
+- affiche sur chaque chaîne le nombre de vidéos contenant réellement le NDD ;
+- mémorise immédiatement les liens des vidéos preuves dans PostgreSQL.
+
+Le cache de recherche distingue maintenant `keyword` et `domain`, ce qui empêche une ancienne recherche mot-clé d'être réutilisée pour un NDD.
+
+
+## V5.4 — découverte large
+
+- suppression du mode de découverte par nom de domaine dans le champ principal ;
+- mode rapide : recherche dans les chaînes + les vidéos ;
+- mode profond : 18 à 21 appels `search.list` selon la niche ;
+- plusieurs pages sur la requête principale ;
+- diversification par pertinence, date et vues ;
+- variantes France / français / francophone / tutoriel / formation / débutant / conseils / 2026 ;
+- expansions contextuelles pour plusieurs niches courantes (dropshipping, e-commerce, Shopify, Amazon FBA, WordPress, Vinted, SEO) ;
+- jusqu’à 500 chaînes candidates conservées avant filtre FR ;
+- cache de découverte versionné pour ne pas réutiliser les anciens résultats étroits.
+
+La recherche NDD dans la section **Liens détectés** reste disponible : seule l’ancienne détection automatique d’un NDD dans le champ principal a été supprimée.

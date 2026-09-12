@@ -22,7 +22,7 @@ async function youtubeRequest(endpoint, params = {}) {
   }
 
   const response = await fetch(url, {
-    headers: { 'User-Agent': 'ScanYTB/4.0' },
+    headers: { 'User-Agent': 'ScanYTB/5.4' },
     signal: AbortSignal.timeout(25_000)
   });
 
@@ -216,30 +216,94 @@ function uniqueStrings(values) {
   return [...new Set(values.map((value) => String(value || '').trim()).filter(Boolean))];
 }
 
+const RELATED_QUERY_EXPANSIONS = [
+  {
+    test: /\bdropshipping\b/i,
+    queries: ['shopify', 'ecommerce', 'produit gagnant', 'fournisseur dropshipping', 'facebook ads ecommerce', 'tiktok ads ecommerce']
+  },
+  {
+    test: /\be[- ]?commerce\b|\becommerce\b/i,
+    queries: ['shopify france', 'boutique en ligne', 'vente en ligne', 'marque ecommerce', 'publicité ecommerce', 'acquisition ecommerce']
+  },
+  {
+    test: /\bshopify\b/i,
+    queries: ['ecommerce shopify', 'boutique shopify', 'app shopify', 'thème shopify', 'seo shopify', 'dropshipping shopify']
+  },
+  {
+    test: /\bamazon\s*fba\b|\bfba\b/i,
+    queries: ['amazon seller france', 'vendre sur amazon', 'private label amazon', 'arbitrage amazon', 'amazon ecommerce']
+  },
+  {
+    test: /\bwordpress\b/i,
+    queries: ['woocommerce', 'elementor wordpress', 'créer site wordpress', 'plugin wordpress', 'seo wordpress']
+  },
+  {
+    test: /\bvinted\b/i,
+    queries: ['achat revente vinted', 'vendeur vinted', 'resell vinted', 'bot vinted', 'business vinted']
+  },
+  {
+    test: /\bseo\b|référencement/i,
+    queries: ['référencement naturel', 'seo france', 'netlinking', 'seo ecommerce', 'google seo']
+  }
+];
+
+function getRelatedQueries(query = '') {
+  const matches = RELATED_QUERY_EXPANSIONS
+    .filter((entry) => entry.test.test(query))
+    .flatMap((entry) => entry.queries);
+  return uniqueStrings(matches).slice(0, 3);
+}
+
 function buildSearchPlan(query, mode) {
   const base = query.trim();
   if (mode !== 'deep') {
-    return [{ q: base, type: 'channel', label: base }];
+    return [
+      { q: base, type: 'channel', label: base, order: 'relevance', pages: 1 },
+      { q: base, type: 'video', label: base, order: 'relevance', pages: 1 }
+    ];
   }
 
-  const variants = uniqueStrings([
-    base,
-    `${base} france`,
-    `${base} français`,
-    `${base} tutoriel`,
-    `comment faire ${base}`
-  ]);
+  const variants = {
+    france: `${base} france`,
+    french: `${base} français`,
+    francophone: `${base} francophone`,
+    tutorial: `${base} tutoriel`,
+    training: `${base} formation`,
+    beginner: `${base} débutant`,
+    howto: `comment faire ${base}`,
+    advice: `${base} conseils`,
+    year: `${base} 2026`
+  };
 
-  return [
-    { q: variants[0], type: 'channel', label: variants[0] },
-    { q: variants[0], type: 'video', label: variants[0] },
-    { q: variants[1], type: 'channel', label: variants[1] },
-    { q: variants[1], type: 'video', label: variants[1] },
-    { q: variants[2], type: 'channel', label: variants[2] },
-    { q: variants[2], type: 'video', label: variants[2] },
-    { q: variants[3], type: 'video', label: variants[3] },
-    { q: variants[4], type: 'video', label: variants[4] }
+  const plan = [
+    // Le cœur de la niche : plusieurs pages + plusieurs classements pour diversifier les résultats.
+    { q: base, type: 'channel', label: base, order: 'relevance', pages: 2 },
+    { q: base, type: 'video', label: base, order: 'relevance', pages: 2 },
+    { q: base, type: 'video', label: base, order: 'date', pages: 2 },
+    { q: base, type: 'video', label: base, order: 'viewCount', pages: 1 },
+
+    // Variantes francophones.
+    { q: variants.france, type: 'channel', label: variants.france, order: 'relevance', pages: 1 },
+    { q: variants.france, type: 'video', label: variants.france, order: 'relevance', pages: 1 },
+    { q: variants.french, type: 'channel', label: variants.french, order: 'relevance', pages: 1 },
+    { q: variants.french, type: 'video', label: variants.french, order: 'relevance', pages: 1 },
+    { q: variants.francophone, type: 'video', label: variants.francophone, order: 'relevance', pages: 1 },
+
+    // Intentions de recherche différentes pour sortir des mêmes résultats habituels.
+    { q: variants.tutorial, type: 'video', label: variants.tutorial, order: 'relevance', pages: 1 },
+    { q: variants.training, type: 'video', label: variants.training, order: 'relevance', pages: 1 },
+    { q: variants.beginner, type: 'video', label: variants.beginner, order: 'relevance', pages: 1 },
+    { q: variants.howto, type: 'video', label: variants.howto, order: 'relevance', pages: 1 },
+    { q: variants.advice, type: 'video', label: variants.advice, order: 'relevance', pages: 1 },
+    { q: variants.year, type: 'video', label: variants.year, order: 'date', pages: 1 }
   ];
+
+  // Pour les niches connues, ajoute quelques recherches connexes : ex. dropshipping -> Shopify / produit gagnant / fournisseurs.
+  for (const related of getRelatedQueries(base)) {
+    plan.push({ q: related, type: 'video', label: related, order: 'relevance', pages: 1 });
+  }
+
+  return plan;
 }
 
 async function searchCandidates(query, mode = 'rapid') {
@@ -247,53 +311,69 @@ async function searchCandidates(query, mode = 'rapid') {
   const candidates = new Map();
   let rawResults = 0;
   let rank = 0;
+  let searchCalls = 0;
 
   for (const step of plan) {
-    const search = await youtubeRequest('search', {
-      part: 'snippet',
-      type: step.type,
-      q: step.q,
-      maxResults: 50,
-      relevanceLanguage: 'fr',
-      regionCode: 'FR',
-      order: 'relevance'
-    });
+    let pageToken;
+    const pages = Math.max(1, Number(step.pages || 1));
 
-    rawResults += (search.items || []).length;
+    for (let pageIndex = 0; pageIndex < pages; pageIndex += 1) {
+      const search = await youtubeRequest('search', {
+        part: 'snippet',
+        type: step.type,
+        q: step.q,
+        maxResults: 50,
+        relevanceLanguage: 'fr',
+        regionCode: 'FR',
+        order: step.order || 'relevance',
+        pageToken
+      });
 
-    for (const item of search.items || []) {
-      const channelId = step.type === 'channel'
-        ? (item?.id?.channelId || item?.snippet?.channelId)
-        : item?.snippet?.channelId;
-      if (!channelId) continue;
+      searchCalls += 1;
+      rawResults += (search.items || []).length;
 
-      if (!candidates.has(channelId)) {
-        candidates.set(channelId, {
-          id: channelId,
-          firstRank: rank++,
-          matchedQueries: new Set(),
-          discoverySources: new Set()
-        });
+      for (const item of search.items || []) {
+        const channelId = step.type === 'channel'
+          ? (item?.id?.channelId || item?.snippet?.channelId)
+          : item?.snippet?.channelId;
+        if (!channelId) continue;
+
+        if (!candidates.has(channelId)) {
+          candidates.set(channelId, {
+            id: channelId,
+            firstRank: rank++,
+            hitCount: 0,
+            matchedQueries: new Set(),
+            discoverySources: new Set(),
+            discoveryOrders: new Set()
+          });
+        }
+
+        const candidate = candidates.get(channelId);
+        candidate.hitCount += 1;
+        candidate.matchedQueries.add(step.label);
+        candidate.discoverySources.add(step.type);
+        candidate.discoveryOrders.add(step.order || 'relevance');
       }
 
-      const candidate = candidates.get(channelId);
-      candidate.matchedQueries.add(step.label);
-      candidate.discoverySources.add(step.type);
+      pageToken = search.nextPageToken;
+      if (!pageToken || !(search.items || []).length) break;
     }
   }
 
-  const candidateLimit = mode === 'deep' ? 250 : 50;
+  const candidateLimit = mode === 'deep' ? 500 : 100;
   return {
     candidates: [...candidates.values()]
-      .sort((a, b) => a.firstRank - b.firstRank)
+      .sort((a, b) => b.hitCount - a.hitCount || a.firstRank - b.firstRank)
       .slice(0, candidateLimit)
       .map((candidate) => ({
         ...candidate,
         matchedQueries: [...candidate.matchedQueries],
-        discoverySources: [...candidate.discoverySources]
+        discoverySources: [...candidate.discoverySources],
+        discoveryOrders: [...candidate.discoveryOrders]
       })),
     rawResults,
-    searchCalls: plan.length,
+    searchCalls,
     searchQueries: uniqueStrings(plan.map((step) => step.label))
   };
 }
@@ -321,10 +401,12 @@ function isVerificationCacheFresh(channel) {
 
 function relevanceScore(channel) {
   const queryMatches = Number(channel.matchedQueries?.length || 0);
-  const sourceBonus = channel.discoverySources?.includes('channel') ? 8 : 0;
-  const videoBonus = channel.discoverySources?.includes('video') ? 4 : 0;
-  const rankPenalty = Math.min(Number(channel.discoveryRank || 0), 200) / 20;
-  return Math.round((queryMatches * 14 + sourceBonus + videoBonus - rankPenalty) * 10) / 10;
+  const hitCount = Number(channel.hitCount || 0);
+  const orderDiversity = Number(channel.discoveryOrders?.length || 0);
+  const sourceBonus = channel.discoverySources?.includes('channel') ? 10 : 0;
+  const videoBonus = channel.discoverySources?.includes('video') ? 6 : 0;
+  const rankPenalty = Math.min(Number(channel.discoveryRank || 0), 500) / 35;
+  return Math.round((queryMatches * 11 + hitCount * 3 + orderDiversity * 2 + sourceBonus + videoBonus - rankPenalty) * 10) / 10;
 }
 
 export async function discoverChannels({
@@ -336,7 +418,7 @@ export async function discoverChannels({
   minVideos = 0,
   cachedChannels = []
 }) {
-  const requested = Math.min(Math.max(Number(maxResults) || 50, 1), 200);
+  const requested = Math.min(Math.max(Number(maxResults) || 50, 1), 500);
   const minSubs = Math.max(Number(minSubscribers) || 0, 0);
   const maxSubs = Math.max(Number(maxSubscribers) || 0, 0);
   const minVids = Math.max(Number(minVideos) || 0, 0);
@@ -373,6 +455,8 @@ export async function discoverChannels({
         ...channel,
         matchedQueries: meta.matchedQueries || [query],
         discoverySources: meta.discoverySources || ['channel'],
+        discoveryOrders: meta.discoveryOrders || ['relevance'],
+        hitCount: Number(meta.hitCount || 1),
         discoveryRank: meta.discoveryRank ?? 9999
       };
     })
@@ -383,7 +467,7 @@ export async function discoverChannels({
   let cacheHits = 0;
   let freshChecks = 0;
 
-  const checked = await mapWithConcurrency(eligible, discoveryMode === 'deep' ? 8 : 6, async (channel) => {
+  const checked = await mapWithConcurrency(eligible, discoveryMode === 'deep' ? 10 : 6, async (channel) => {
     const cached = cache.get(channel.id);
     let classification;
     let verificationCached = false;

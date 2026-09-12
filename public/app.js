@@ -119,9 +119,11 @@ function renderChannels() {
   container.className = 'channel-list';
   container.innerHTML = channels.map((channel) => {
     const queryCount = Number(channel.matchedQueries?.length || 0);
+    const hitCount = Number(channel.hitCount || 0);
     const sourceText = channel.discoverySources?.includes('video') && channel.discoverySources?.includes('channel')
       ? 'chaînes + vidéos'
       : channel.discoverySources?.includes('video') ? 'via vidéos' : 'via chaînes';
+    const sourceTitle = (channel.matchedQueries || []).join(' · ');
     const cacheBadge = channel.verificationCached
       ? '<span class="cache-badge">cache</span>'
       : '';
@@ -137,7 +139,7 @@ function renderChannels() {
             </div>
             <div class="channel-source-meta">
               ${cacheBadge}
-              <span class="discover-badge" title="${escapeHtml((channel.matchedQueries || []).join(' · '))}">${queryCount} req. · ${escapeHtml(sourceText)}</span>
+              <span class="discover-badge" title="${escapeHtml(sourceTitle)}">${queryCount} req. · ${hitCount} signaux · ${escapeHtml(sourceText)}</span>
             </div>
           </div>
         </div>
@@ -177,6 +179,10 @@ function collectSearchPayload() {
   const minSubscribers = Number($('#minSubscribers').value || 0);
   const maxSubscribers = Number($('#maxSubscribers').value || 0);
   if (!query) return null;
+  if (looksLikeDomain(query)) {
+    toast('Entre une niche ou un mot-clé, pas un nom de domaine.', 'error');
+    return null;
+  }
   if (maxSubscribers && maxSubscribers < minSubscribers) {
     toast('Le maximum d’abonnés doit être supérieur ou égal au minimum.', 'error');
     return null;
@@ -226,8 +232,8 @@ async function performDiscovery(payload) {
   button.classList.add('loading');
   button.textContent = payload.mode === 'deep' ? 'Recherche profonde' : 'Recherche rapide';
   $('#discoverMeta').textContent = payload.mode === 'deep'
-    ? 'Plusieurs requêtes YouTube + déduplication + vérification FR…'
-    : 'Recherche rapide + vérification FR…';
+    ? 'Exploration multi-requêtes YouTube + plusieurs classements + déduplication + vérification FR…'
+    : 'Recherche chaînes + vidéos + vérification FR…';
 
   try {
     const data = await api('/api/discover', {
@@ -236,7 +242,7 @@ async function performDiscovery(payload) {
     });
 
     state.discoveredChannels = data.channels;
-    state.currentSearchQuery = payload.query;
+    state.currentSearchQuery = data.query || payload.query;
     state.linkPage = 1;
     state.currentSearchChannelIds = data.channels.map((channel) => channel.id);
     $('#exportSearchDomainsBtn').disabled = !state.currentSearchChannelIds.length;
@@ -253,7 +259,7 @@ async function performDiscovery(payload) {
     const sourceText = data.servedFromCache
       ? (data.quotaReached ? ' · quota YouTube atteint · résultats du cache' : ' · cache recherche')
       : '';
-    $('#discoverMeta').textContent = `${data.rawResults} résultats YouTube · ${data.uniqueCandidates} chaînes uniques · ${data.count} FR retenues · ${data.rejected} étrangères${minimumText} · ${data.cacheHits} vérifs cache${sourceText}`;
+    $('#discoverMeta').textContent = `${data.rawResults} résultats YouTube · ${data.searchCalls || 0} appels de découverte · ${data.uniqueCandidates} chaînes uniques · ${data.count} FR retenues · ${data.rejected} étrangères${minimumText} · ${data.cacheHits} vérifs cache${sourceText}`;
 
     const modeLabel = data.mode === 'deep' ? 'Recherche profonde' : 'Recherche rapide';
     const creditSuffix = state.user?.isAdmin ? ' · compte admin, aucun crédit débité.' : ' · 1 crédit utilisé.';
@@ -922,21 +928,32 @@ async function handlePaymentReturn() {
   }
 }
 
+function updateSearchHint() {
+  const hint = $('.deep-hint');
+  if (!hint) return;
+  const query = $('#query')?.value?.trim() || '';
+  if (looksLikeDomain(query)) {
+    hint.innerHTML = '<strong>Recherche par niche</strong><span>Entre un mot-clé comme dropshipping, Shopify ou WordPress — pas un nom de domaine.</span>';
+    return;
+  }
+  if (state.searchMode === 'deep') {
+    hint.innerHTML = '<strong>Profonde</strong><span>18 à 21 appels YouTube · variantes FR · chaînes + vidéos · pertinence + récent + vues · déduplication</span>';
+  } else {
+    hint.innerHTML = '<strong>Rapide</strong><span>2 appels YouTube · chaînes + vidéos · idéale pour tester un mot-clé</span>';
+  }
+}
+
 function setMode(mode) {
   state.searchMode = mode === 'rapid' ? 'rapid' : 'deep';
   $('#searchMode').value = state.searchMode;
   document.querySelectorAll('.mode-btn').forEach((button) => {
     button.classList.toggle('active', button.dataset.mode === state.searchMode);
   });
-  const hint = $('.deep-hint');
-  if (state.searchMode === 'deep') {
-    hint.innerHTML = '<strong>Profonde</strong><span>8 recherches YouTube · chaînes + vidéos · cache 30 jours</span>';
-  } else {
-    hint.innerHTML = '<strong>Rapide</strong><span>1 recherche YouTube · idéale pour tester un mot-clé</span>';
-  }
+  updateSearchHint();
 }
 
 $('#discoverForm').addEventListener('submit', discover);
+$('#query')?.addEventListener('input', updateSearchHint);
 $('#authForm')?.addEventListener('submit', handleAuthSubmit);
 $('#authTabLogin')?.addEventListener('click', () => setAuthMode('login'));
 $('#authTabRegister')?.addEventListener('click', () => setAuthMode('register'));
@@ -1000,6 +1017,7 @@ document.querySelectorAll('.mode-btn').forEach((button) => {
 document.querySelectorAll('[data-query-example]').forEach((button) => {
   button.addEventListener('click', () => {
     $('#query').value = button.dataset.queryExample || '';
+    updateSearchHint();
     $('#query').focus();
   });
 });
