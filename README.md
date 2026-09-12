@@ -1,4 +1,4 @@
-# ScanYTB V5.2.1 — Dodo Payments + compte admin
+# ScanYTB V5.2.2 — Dodo Payments + compte admin
 
 ScanYTB analyse les chaînes YouTube françaises et extrait les liens présents dans les descriptions. Cette version ajoute les comptes utilisateurs, les crédits de recherche et le paiement unique via Dodo Payments.
 
@@ -104,6 +104,6 @@ Le serveur crée une Checkout Session Dodo à chaque achat :
 Le retour navigateur n’est jamais considéré comme preuve de paiement : ScanYTB vérifie le paiement côté serveur et/ou attend le webhook signé.
 
 
-## V5.2.1
+## V5.2.2
 - Correction visuelle : le bouton d’achat de crédit est désormais strictement masqué pour les comptes administrateurs.
 - Ajout d’une règle globale `[hidden] { display: none !important; }` pour éviter qu’un style `display:flex` ne réaffiche un élément masqué.
