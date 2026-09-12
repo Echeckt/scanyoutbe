@@ -1,6 +1,6 @@
 {
   "name": "scan-ytb",
-  "version": "5.2.0",
+  "version": "5.2.1",
   "private": true,
   "description": "ScanYTB - paid YouTube intelligence searches with accounts, credits, admin access and Dodo Payments.",
   "type": "module",

@@ -20,6 +20,9 @@
 }
 
 * { box-sizing: border-box; }
+
+/* V5.2.1 — garantir que l’attribut HTML hidden reste prioritaire sur les styles de boutons/cartes */
+[hidden] { display: none !important; }
 html { scroll-behavior: smooth; color-scheme: dark; width: 100%; max-width: 100%; overflow-x: hidden; }
 body { width: 100%; max-width: 100%; overflow-x: hidden; }
 body {

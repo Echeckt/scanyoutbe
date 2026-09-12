@@ -704,7 +704,10 @@ function renderUserUI() {
     }
     if ($('#accountAdminBadge')) $('#accountAdminBadge').hidden = true;
     if ($('#accountCreditLabel')) $('#accountCreditLabel').textContent = 'crédit';
-    if ($('#accountBuyCredit')) $('#accountBuyCredit').hidden = false;
+    if ($('#accountBuyCredit')) {
+      $('#accountBuyCredit').hidden = false;
+      $('#accountBuyCredit').style.display = '';
+    }
     if ($('#searchPriceNote')) {
       $('#searchPriceNote').innerHTML = '<span>1 recherche = 1 crédit</span><strong>4,99 €</strong><small>Le crédit est rendu automatiquement si la recherche échoue.</small>';
     }
@@ -724,7 +727,10 @@ function renderUserUI() {
   if ($('#accountCredits')) $('#accountCredits').textContent = admin ? '∞' : exactFmt.format(credits);
   if ($('#accountCreditLabel')) $('#accountCreditLabel').textContent = admin ? 'illimités' : 'crédit';
   if ($('#accountAdminBadge')) $('#accountAdminBadge').hidden = !admin;
-  if ($('#accountBuyCredit')) $('#accountBuyCredit').hidden = admin;
+  if ($('#accountBuyCredit')) {
+    $('#accountBuyCredit').hidden = admin;
+    $('#accountBuyCredit').style.display = admin ? 'none' : '';
+  }
   if ($('#searchPriceNote')) {
     $('#searchPriceNote').innerHTML = admin
       ? '<span>Compte administrateur</span><strong>∞</strong><small>Recherches et accès illimités.</small>'
