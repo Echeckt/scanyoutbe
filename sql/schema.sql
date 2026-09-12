@@ -74,7 +74,6 @@ CREATE TABLE IF NOT EXISTS users (
   email TEXT NOT NULL UNIQUE,
   password_hash TEXT NOT NULL,
   credits INTEGER NOT NULL DEFAULT 0 CHECK (credits >= 0),
-  stripe_customer_id TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -120,14 +119,18 @@ CREATE TABLE IF NOT EXISTS credit_transactions (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS payments (
-  stripe_session_id TEXT PRIMARY KEY,
-  stripe_payment_intent TEXT,
+CREATE TABLE IF NOT EXISTS dodo_payments (
+  id BIGSERIAL PRIMARY KEY,
+  checkout_session_id TEXT UNIQUE,
+  payment_id TEXT UNIQUE,
+  webhook_id TEXT UNIQUE,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  product_id TEXT,
   amount_cents INTEGER NOT NULL DEFAULT 499,
-  currency TEXT NOT NULL DEFAULT 'usd',
+  currency TEXT NOT NULL DEFAULT 'eur',
   credits INTEGER NOT NULL DEFAULT 1,
   status TEXT NOT NULL DEFAULT 'pending',
+  metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   paid_at TIMESTAMPTZ
 );
@@ -147,5 +150,8 @@ CREATE INDEX IF NOT EXISTS idx_user_sessions_expires_at ON user_sessions(expires
 CREATE INDEX IF NOT EXISTS idx_user_searches_user_id_created_at ON user_searches(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_user_search_channels_user_channel ON user_search_channels(user_id, channel_id);
 CREATE INDEX IF NOT EXISTS idx_credit_transactions_user_id ON credit_transactions(user_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_payments_user_id ON payments(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_discovery_cache_updated_at ON discovery_cache(updated_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_dodo_payments_user_id ON dodo_payments(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_dodo_payments_checkout ON dodo_payments(checkout_session_id);
+CREATE INDEX IF NOT EXISTS idx_dodo_payments_payment ON dodo_payments(payment_id);

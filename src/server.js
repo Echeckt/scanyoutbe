@@ -4,7 +4,6 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
 import helmet from 'helmet';
-import Stripe from 'stripe';
 import { initDatabase, hasDatabase } from './db.js';
 import { discoverChannels, getChannel, getUploadedVideos, getVideoStatistics } from './youtube.js';
 import { extractLinks } from './links.js';
@@ -27,7 +26,7 @@ import {
   createUser, authenticateUser, createSession, setSessionCookie, clearSessionCookie,
   destroySession, getUserFromRequest, getUserById, reserveSearchCredit, completeUserSearch,
   refundSearchCredit, canUserScanChannel, hasCompletedSearch, getSearchHistory, getUserSearch,
-  recordCheckoutSession, fulfillPaidCheckout
+  recordDodoCheckoutSession, fulfillDodoPayment, resolveDodoPaymentUserId, getDodoPaymentRecord
 } from './account.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -35,7 +34,75 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
 const APP_URL = String(process.env.APP_URL || 'https://scan-ytb.com').replace(/\/$/, '');
-const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null;
+const DODO_ENVIRONMENT = String(process.env.DODO_PAYMENTS_ENVIRONMENT || 'live_mode').toLowerCase();
+const DODO_API_BASE = DODO_ENVIRONMENT === 'test_mode'
+  ? 'https://test.dodopayments.com'
+  : 'https://live.dodopayments.com';
+const DODO_PRODUCT_ID = String(process.env.DODO_PRODUCT_ID || '').trim();
+const DODO_API_KEY = String(process.env.DODO_PAYMENTS_API_KEY || '').trim();
+const DODO_WEBHOOK_KEY = String(process.env.DODO_PAYMENTS_WEBHOOK_KEY || '').trim();
+
+function dodoConfigured() {
+  return Boolean(DODO_API_KEY && DODO_PRODUCT_ID && DODO_WEBHOOK_KEY);
+}
+
+function verifyDodoWebhook(rawBody, headers) {
+  const webhookId = String(headers['webhook-id'] || '');
+  const webhookSignature = String(headers['webhook-signature'] || '');
+  const webhookTimestamp = String(headers['webhook-timestamp'] || '');
+  if (!webhookId || !webhookSignature || !webhookTimestamp) throw new Error('Headers webhook manquants.');
+
+  const timestamp = Number.parseInt(webhookTimestamp, 10);
+  if (!Number.isFinite(timestamp)) throw new Error('Timestamp webhook invalide.');
+  const now = Math.floor(Date.now() / 1000);
+  if (Math.abs(now - timestamp) > 5 * 60) throw new Error('Webhook expiré.');
+
+  let secret = DODO_WEBHOOK_KEY;
+  if (secret.startsWith('whsec_')) secret = secret.slice('whsec_'.length);
+  const key = Buffer.from(secret, 'base64');
+  if (!key.length) throw new Error('Signing secret Dodo invalide.');
+
+  const expected = crypto
+    .createHmac('sha256', key)
+    .update(`${webhookId}.${timestamp}.${rawBody}`)
+    .digest('base64');
+
+  const valid = webhookSignature.split(' ').some((entry) => {
+    const [version, signature] = entry.split(',');
+    if (version !== 'v1' || !signature) return false;
+    const a = Buffer.from(signature);
+    const b = Buffer.from(expected);
+    return a.length === b.length && crypto.timingSafeEqual(a, b);
+  });
+  if (!valid) throw new Error('Signature webhook invalide.');
+  return true;
+}
+
+async function dodoRequest(pathname, options = {}) {
+  if (!DODO_API_KEY) {
+    const error = new Error('Dodo Payments n’est pas encore configuré.');
+    error.status = 503;
+    error.code = 'DODO_NOT_CONFIGURED';
+    throw error;
+  }
+  const response = await fetch(`${DODO_API_BASE}${pathname}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${DODO_API_KEY}`,
+      ...(options.headers || {})
+    }
+  });
+  const body = await response.json().catch(() => null);
+  if (!response.ok) {
+    const error = new Error(body?.message || body?.error || body?.detail || `Dodo Payments a répondu ${response.status}.`);
+    error.status = response.status >= 400 && response.status < 500 ? 400 : 502;
+    error.code = 'DODO_API_ERROR';
+    error.details = body;
+    throw error;
+  }
+  return body;
+}
 
 app.set('trust proxy', 1);
 
@@ -48,20 +115,32 @@ app.use(helmet({
     }
   }
 }));
-app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
-  if (!stripe || !process.env.STRIPE_WEBHOOK_SECRET) {
-    return res.status(503).send('Stripe webhook non configuré.');
-  }
+app.post('/api/dodo/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  if (!DODO_WEBHOOK_KEY) return res.status(503).send('Webhook Dodo Payments non configuré.');
   try {
-    const signature = req.headers['stripe-signature'];
-    const event = stripe.webhooks.constructEvent(req.body, signature, process.env.STRIPE_WEBHOOK_SECRET);
-    if (event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded') {
-      await fulfillPaidCheckout(event.data.object);
+    const webhookId = String(req.headers['webhook-id'] || '');
+    const webhookSignature = String(req.headers['webhook-signature'] || '');
+    const webhookTimestamp = String(req.headers['webhook-timestamp'] || '');
+    if (!webhookId || !webhookSignature || !webhookTimestamp) {
+      return res.status(400).send('Headers webhook manquants.');
     }
-    res.json({ received: true });
+
+    const rawBody = Buffer.isBuffer(req.body) ? req.body.toString('utf8') : String(req.body || '');
+    verifyDodoWebhook(rawBody, {
+      'webhook-id': webhookId,
+      'webhook-signature': webhookSignature,
+      'webhook-timestamp': webhookTimestamp
+    });
+
+    const event = JSON.parse(rawBody);
+    // Répondre seulement après traitement : Dodo peut réessayer les livraisons non-2xx.
+    if (event?.type === 'payment.succeeded') {
+      await fulfillDodoPayment(event, { webhookId });
+    }
+    return res.json({ received: true });
   } catch (error) {
-    console.error('Stripe webhook error:', error.message);
-    res.status(400).send(`Webhook Error: ${error.message}`);
+    console.error('Dodo webhook error:', error?.message || error);
+    return res.status(400).send('Webhook Dodo invalide.');
   }
 });
 
@@ -146,51 +225,72 @@ app.get('/api/account/searches/:id', requireAuth, async (req, res, next) => {
 
 app.post('/api/billing/checkout', requireAuth, async (req, res, next) => {
   try {
-    if (!stripe) return res.status(503).json({ error: 'Le paiement Stripe n’est pas encore configuré.', code: 'STRIPE_NOT_CONFIGURED' });
-    const checkout = await stripe.checkout.sessions.create({
-      mode: 'payment',
-      customer_email: req.user.email,
-      line_items: [{
-        quantity: 1,
-        price_data: {
-          currency: 'usd',
-          unit_amount: 499,
-          product_data: {
-            name: 'ScanYTB — 1 crédit de recherche',
-            description: 'Un crédit pour lancer une recherche YouTube sur ScanYTB.'
-          }
-        }
-      }],
-      metadata: { user_id: req.user.id, credits: '1' },
-      client_reference_id: req.user.id,
-      success_url: `${APP_URL}/?payment=success&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${APP_URL}/?payment=cancelled`,
-      locale: 'fr'
+    if (!DODO_API_KEY || !DODO_PRODUCT_ID) {
+      return res.status(503).json({ error: 'Le paiement Dodo Payments n’est pas encore configuré.', code: 'DODO_NOT_CONFIGURED' });
+    }
+
+    const checkout = await dodoRequest('/checkouts', {
+      method: 'POST',
+      body: JSON.stringify({
+        product_cart: [{ product_id: DODO_PRODUCT_ID, quantity: 1 }],
+        customer: { email: req.user.email },
+        return_url: `${APP_URL}/?payment=success`,
+        metadata: {
+          user_id: req.user.id,
+          credits: '1',
+          product_id: DODO_PRODUCT_ID,
+          source: 'scan_ytb'
+        },
+        feature_flags: { redirect_immediately: true }
+      })
     });
-    await recordCheckoutSession({ sessionId: checkout.id, userId: req.user.id, amountCents: 499, currency: 'usd', credits: 1 });
-    res.json({ url: checkout.url });
+
+    if (!checkout?.session_id || !checkout?.checkout_url) {
+      throw new Error('Dodo Payments n’a pas renvoyé de lien de paiement valide.');
+    }
+
+    await recordDodoCheckoutSession({
+      sessionId: checkout.session_id,
+      userId: req.user.id,
+      productId: DODO_PRODUCT_ID,
+      amountCents: 499,
+      currency: 'eur',
+      credits: 1
+    });
+
+    res.json({ url: checkout.checkout_url, sessionId: checkout.session_id });
   } catch (error) { next(error); }
 });
 
-app.post('/api/billing/verify-session', requireAuth, async (req, res, next) => {
+app.post('/api/billing/verify-payment', requireAuth, async (req, res, next) => {
   try {
-    if (!stripe) return res.status(503).json({ error: 'Stripe non configuré.' });
-    const sessionId = String(req.body?.sessionId || '').trim();
-    if (!sessionId) return res.status(400).json({ error: 'Session Stripe manquante.' });
-    const session = await stripe.checkout.sessions.retrieve(sessionId);
-    if (String(session.metadata?.user_id || '') !== req.user.id) return res.status(403).json({ error: 'Session de paiement invalide.' });
-    if (session.payment_status === 'paid') await fulfillPaidCheckout(session);
-    res.json({ paid: session.payment_status === 'paid', user: await getUserById(req.user.id) });
+    const paymentId = String(req.body?.paymentId || '').trim();
+    if (!paymentId) return res.status(400).json({ error: 'Identifiant de paiement Dodo manquant.' });
+
+    // Si le webhook a déjà été reçu, aucune requête Dodo supplémentaire n’est nécessaire.
+    const existing = await getDodoPaymentRecord(paymentId, req.user.id);
+    if (existing?.status === 'paid') {
+      return res.json({ paid: true, user: await getUserById(req.user.id) });
+    }
+
+    const payment = await dodoRequest(`/payments/${encodeURIComponent(paymentId)}`, { method: 'GET' });
+    const ownerId = await resolveDodoPaymentUserId(payment);
+    if (ownerId !== req.user.id) return res.status(403).json({ error: 'Paiement invalide pour ce compte.' });
+
+    const paid = String(payment?.status || '').toLowerCase() === 'succeeded';
+    if (paid) await fulfillDodoPayment(payment);
+    res.json({ paid, user: await getUserById(req.user.id) });
   } catch (error) { next(error); }
 });
 
 app.get('/api/health', async (_req, res) => {
   res.json({
     ok: true,
-    version: '5.0.0',
+    version: '5.1.0',
     youtubeKeyConfigured: Boolean(process.env.YOUTUBE_API_KEY),
     databaseConfigured: hasDatabase(),
-    stripeConfigured: Boolean(stripe && process.env.STRIPE_WEBHOOK_SECRET),
+    dodoConfigured: dodoConfigured(),
+    dodoEnvironment: DODO_ENVIRONMENT,
     timestamp: new Date().toISOString()
   });
 });
@@ -691,7 +791,7 @@ async function bootstrap() {
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`ScanYTB v5 running on port ${PORT}`);
+    console.log(`ScanYTB v5.1 Dodo running on port ${PORT}`);
   });
 }
 

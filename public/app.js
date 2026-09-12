@@ -834,26 +834,53 @@ async function logout() {
 async function handlePaymentReturn() {
   const params = new URLSearchParams(window.location.search);
   const payment = params.get('payment');
-  const sessionId = params.get('session_id');
+  const paymentId = params.get('payment_id');
+  const dodoStatus = params.get('status');
   if (!payment) return;
 
   history.replaceState({}, '', window.location.pathname + window.location.hash);
   if (payment === 'cancelled') {
     sessionStorage.removeItem('scanYTB.pendingSearch');
     state.pendingSearchPayload = null;
-    toast('Paiement annulé. Aucun débit.', 'error');
+    toast('Paiement annulé. Aucun crédit consommé.', 'error');
     return;
   }
-  if (payment !== 'success' || !sessionId || !state.user) return;
+  if (payment !== 'success' || !state.user) return;
 
   try {
-    const result = await api('/api/billing/verify-session', {
-      method: 'POST',
-      body: JSON.stringify({ sessionId })
-    });
+    let result = null;
+    if (paymentId) {
+      result = await api('/api/billing/verify-payment', {
+        method: 'POST',
+        body: JSON.stringify({ paymentId })
+      });
+    } else {
+      // Le webhook Dodo peut être arrivé avant le retour navigateur.
+      await new Promise((resolve) => setTimeout(resolve, 900));
+      await loadSession();
+      result = { paid: Number(state.user?.credits || 0) > 0, user: state.user };
+    }
+
     state.user = result.user || state.user;
     renderUserUI();
-    if (!result.paid) throw new Error('Le paiement n’est pas encore confirmé par Stripe.');
+    if (!result.paid && dodoStatus !== 'succeeded') {
+      throw new Error('Le paiement est encore en cours de confirmation par Dodo Payments.');
+    }
+
+    // Si le retour annonce succeeded mais le webhook n'est pas encore visible, recharge le compte quelques fois.
+    if (Number(state.user?.credits || 0) < 1) {
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 700));
+        await loadSession();
+        if (Number(state.user?.credits || 0) > 0) break;
+      }
+    }
+
+    if (Number(state.user?.credits || 0) < 1) {
+      toast('Paiement reçu. Le crédit est en cours d’ajout, recharge la page dans quelques secondes.');
+      return;
+    }
+
     toast('Paiement confirmé : +1 crédit ajouté.');
     const pendingRaw = sessionStorage.getItem('scanYTB.pendingSearch');
     if (pendingRaw) {
@@ -861,7 +888,7 @@ async function handlePaymentReturn() {
       const pending = JSON.parse(pendingRaw);
       state.pendingSearchPayload = pending;
       restoreSearchForm(pending);
-      if (Number(state.user.credits || 0) > 0) await performDiscovery(pending);
+      await performDiscovery(pending);
     }
   } catch (error) {
     toast(error.message, 'error');

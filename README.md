@@ -1,125 +1,73 @@
-# ScanYTB V5
+# ScanYTB V5.1 — Dodo Payments
 
-Scanner YouTube français avec comptes utilisateurs, crédits de recherche et paiement Stripe.
+ScanYTB analyse les chaînes YouTube françaises et extrait les liens présents dans les descriptions. Cette version ajoute les comptes utilisateurs, les crédits de recherche et le paiement unique via Dodo Payments.
 
-## Modèle commercial
+## Fonctionnement
 
-- Création de compte gratuite.
+- Création de compte / connexion sécurisée.
 - 1 recherche = 1 crédit.
-- 1 crédit = 4,99 USD.
-- Le crédit est réservé côté serveur au lancement de la recherche.
-- Si la recherche échoue techniquement ou si YouTube refuse la requête sans cache disponible, le crédit est automatiquement rendu.
-- Une recherche terminée apparaît dans l’historique du compte.
-
-## Fonctionnalités
-
-- Inscription / connexion / déconnexion.
-- Sessions sécurisées via cookie `HttpOnly`, `SameSite=Lax` et `Secure` en production.
-- Mots de passe hashés avec bcrypt.
-- Stripe Checkout hébergé par Stripe.
-- Webhook Stripe idempotent pour créditer le compte une seule fois.
-- Vérification serveur du paiement au retour de Stripe.
+- 1 crédit = 4,99 € TTC.
+- Checkout hébergé par Dodo Payments.
+- Webhook `payment.succeeded` vérifié par signature Standard Webhooks.
+- Le crédit est ajouté une seule fois grâce à l’idempotence côté PostgreSQL.
+- Le crédit est débité côté serveur au lancement d’une recherche.
+- Si la recherche échoue techniquement avant résultat, le crédit est automatiquement rendu.
 - Historique des recherches par utilisateur.
-- Protection serveur des recherches, scans, exports et recherche globale NDD.
-- Une chaîne ne peut être scannée que si elle provient d’une recherche achetée par le compte.
-- Cache YouTube conservé pour réduire la consommation du quota.
-- Les descriptions complètes des vidéos ne sont plus conservées après extraction des liens afin de réduire fortement la taille PostgreSQL.
+- Les scans de chaînes et exports restent liés aux recherches achetées.
 
 ## Variables Railway
 
-Conserve les variables existantes :
-
-```env
-YOUTUBE_API_KEY=...
-DATABASE_URL=${{Postgres.DATABASE_URL}}
-NODE_ENV=production
-```
-
-Ajoute :
+Les variables déjà configurées sont suffisantes :
 
 ```env
 APP_URL=https://scan-ytb.com
-STRIPE_SECRET_KEY=sk_live_...
-STRIPE_WEBHOOK_SECRET=whsec_...
+DATABASE_URL=...
+YOUTUBE_API_KEY=...
+DODO_PAYMENTS_API_KEY=...
+DODO_PAYMENTS_WEBHOOK_KEY=...
+DODO_PRODUCT_ID=pdt_0NnPPhnQCfvPY1npwmxNm
 ```
 
-Pour tester avant le live, utilise une clé Stripe `sk_test_...` et le webhook du mode test.
-
-## Stripe
-
-### 1. Récupérer la clé secrète
-
-Dans Stripe Dashboard > Developers > API keys, copie la clé secrète et ajoute-la dans Railway sous :
+Optionnel :
 
 ```env
-STRIPE_SECRET_KEY=sk_test_...
+DODO_PAYMENTS_ENVIRONMENT=live_mode
 ```
 
-### 2. Créer le webhook
+Si cette variable est absente, ScanYTB utilise `live_mode`. Pour tester avec le sandbox Dodo, utilise `test_mode` avec une clé, un produit et un webhook créés en mode test.
 
-Dans Stripe Dashboard > Developers > Webhooks, ajoute l’endpoint :
+## Webhook Dodo
+
+Endpoint :
 
 ```text
-https://scan-ytb.com/api/stripe/webhook
+https://scan-ytb.com/api/dodo/webhook
 ```
 
-Événements à écouter :
+Événement :
 
 ```text
-checkout.session.completed
-checkout.session.async_payment_succeeded
+payment.succeeded
 ```
 
-Copie ensuite le signing secret du webhook dans Railway :
-
-```env
-STRIPE_WEBHOOK_SECRET=whsec_...
-```
-
-### 3. Redeploy
-
-Après avoir ajouté les variables, redeploy le service ScanYTB sur Railway.
-
-## Flux utilisateur
-
-1. L’utilisateur configure sa recherche.
-2. Il clique sur `Lancer la recherche`.
-3. Sans compte : popup inscription / connexion.
-4. Avec 0 crédit : popup paiement 4,99 $.
-5. Stripe Checkout encaisse le paiement.
-6. Le webhook crédite le compte de +1.
-7. Le retour Stripe vérifie le paiement et relance automatiquement la recherche en attente.
-8. Le serveur retire 1 crédit au lancement.
-9. Si la recherche échoue, le serveur rembourse automatiquement le crédit.
-
-## Tables ajoutées
-
-```text
-users
-user_sessions
-user_searches
-user_search_channels
-credit_transactions
-payments
-```
-
-Les migrations sont créées automatiquement au démarrage avec `initDatabase()`.
+Le webhook doit conserver sa Signing Secret dans Railway sous `DODO_PAYMENTS_WEBHOOK_KEY`.
 
 ## Déploiement
 
-Le contenu du dossier peut être placé directement à la racine du repository GitHub relié à Railway.
+1. Remplace le contenu du repo GitHub par cette version.
+2. Commit / push sur la branche reliée à Railway.
+3. Railway redéploie automatiquement.
+4. La migration PostgreSQL est exécutée au démarrage et crée les tables de compte/paiement manquantes.
+5. Dans Dodo Payments > Webhooks > Testing, envoie un exemple `payment.succeeded` pour vérifier que l’endpoint répond en 2xx.
 
-```bash
-npm install
-npm start
-```
+## Paiement
 
-Vérification syntaxique :
+Le serveur crée une Checkout Session Dodo à chaque achat :
 
-```bash
-npm run check
-```
+- produit : `DODO_PRODUCT_ID`
+- quantité : `1`
+- e-mail prérempli depuis le compte ScanYTB
+- metadata : `user_id`, `credits=1`, `product_id`
+- retour : `https://scan-ytb.com/?payment=success`
 
-## Important avant ouverture publique
-
-La V5 inclut l’authentification et le paiement, mais pas encore la vérification d’adresse e-mail ni la récupération de mot de passe. Avant une commercialisation à grande échelle, ajoute également CGV, politique de confidentialité et politique de remboursement adaptées à ton activité.
+Le retour navigateur n’est jamais considéré comme preuve de paiement : ScanYTB vérifie le paiement côté serveur et/ou attend le webhook signé.

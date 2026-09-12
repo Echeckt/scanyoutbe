@@ -328,70 +328,161 @@ export async function getUserSearch(userId, searchId) {
   };
 }
 
-export async function recordCheckoutSession({ sessionId, userId, amountCents = 499, currency = 'usd', credits = 1 }) {
+export async function recordDodoCheckoutSession({ sessionId, userId, productId, amountCents = 499, currency = 'eur', credits = 1 }) {
   const db = requireDb();
   await db.query(`
-    INSERT INTO payments (stripe_session_id, user_id, amount_cents, currency, credits, status)
-    VALUES ($1,$2,$3,$4,$5,'pending')
-    ON CONFLICT (stripe_session_id) DO NOTHING
-  `, [sessionId, userId, amountCents, currency, credits]);
+    INSERT INTO dodo_payments (checkout_session_id, user_id, product_id, amount_cents, currency, credits, status)
+    VALUES ($1,$2,$3,$4,$5,$6,'pending')
+    ON CONFLICT (checkout_session_id) DO UPDATE SET
+      user_id = EXCLUDED.user_id,
+      product_id = EXCLUDED.product_id,
+      amount_cents = EXCLUDED.amount_cents,
+      currency = EXCLUDED.currency,
+      credits = EXCLUDED.credits
+  `, [sessionId, userId, productId || null, amountCents, String(currency || 'eur').toLowerCase(), credits]);
 }
 
-export async function fulfillPaidCheckout(session) {
+function dodoPaymentObject(eventOrPayment) {
+  if (!eventOrPayment || typeof eventOrPayment !== 'object') return null;
+  const data = eventOrPayment.data;
+  if (data && typeof data === 'object') {
+    if (data.object && typeof data.object === 'object') return data.object;
+    if (data.payment_id || data.checkout_session_id || data.status) return data;
+  }
+  return eventOrPayment;
+}
+
+function dodoMetadata(payment) {
+  const metadata = payment?.metadata;
+  return metadata && typeof metadata === 'object' ? metadata : {};
+}
+
+export async function resolveDodoPaymentUserId(eventOrPayment) {
+  const payment = dodoPaymentObject(eventOrPayment);
+  if (!payment) return null;
+  const metadata = dodoMetadata(payment);
+  const metadataUserId = String(metadata.user_id || metadata.userId || '').trim();
+  if (metadataUserId) return metadataUserId;
+
+  const checkoutSessionId = String(payment.checkout_session_id || '').trim();
+  if (!checkoutSessionId) return null;
+  const result = await requireDb().query(`
+    SELECT user_id FROM dodo_payments WHERE checkout_session_id = $1 LIMIT 1
+  `, [checkoutSessionId]);
+  return result.rows[0]?.user_id || null;
+}
+
+export async function getDodoPaymentRecord(paymentId, userId) {
+  const id = String(paymentId || '').trim();
+  if (!id) return null;
+  const result = await requireDb().query(`
+    SELECT payment_id, checkout_session_id, user_id, product_id, amount_cents, currency, credits, status, paid_at
+    FROM dodo_payments
+    WHERE payment_id = $1 AND user_id = $2
+    LIMIT 1
+  `, [id, userId]);
+  return result.rows[0] || null;
+}
+
+export async function fulfillDodoPayment(eventOrPayment, { webhookId = null } = {}) {
   const db = requireDb();
-  const userId = String(session?.metadata?.user_id || '').trim();
-  const credits = Math.max(Number(session?.metadata?.credits || 1), 1);
-  if (!userId || !session?.id) return false;
-  if (session.payment_status !== 'paid') return false;
+  const payment = dodoPaymentObject(eventOrPayment);
+  if (!payment) return false;
+
+  const paymentId = String(payment.payment_id || '').trim();
+  const checkoutSessionId = String(payment.checkout_session_id || '').trim() || null;
+  if (!paymentId) return false;
+
+  const metadata = dodoMetadata(payment);
+  let userId = String(metadata.user_id || metadata.userId || '').trim();
+  const credits = Math.max(Number(metadata.credits || 1), 1);
+  const configuredProductId = String(process.env.DODO_PRODUCT_ID || '').trim();
+  const cart = Array.isArray(payment.product_cart) ? payment.product_cart : [];
+  const purchasedProductId = String(cart[0]?.product_id || metadata.product_id || configuredProductId || '').trim() || null;
+
+  // Never grant a ScanYTB credit for an unrelated Dodo product.
+  if (configuredProductId && cart.length && !cart.some((item) => String(item?.product_id || '') === configuredProductId)) {
+    return false;
+  }
+
+  const status = String(payment.status || '').toLowerCase();
+  if (status && status !== 'succeeded' && status !== 'paid') return false;
 
   const client = await db.connect();
   try {
     await client.query('BEGIN');
-    const existing = await client.query(`
-      SELECT stripe_session_id, status FROM payments WHERE stripe_session_id = $1 FOR UPDATE
-    `, [session.id]);
+
+    let existing = await client.query(`
+      SELECT id, user_id, status, credits
+      FROM dodo_payments
+      WHERE payment_id = $1 OR ($2::text IS NOT NULL AND checkout_session_id = $2)
+      ORDER BY CASE WHEN payment_id = $1 THEN 0 ELSE 1 END
+      LIMIT 1
+      FOR UPDATE
+    `, [paymentId, checkoutSessionId]);
 
     if (existing.rows[0]?.status === 'paid') {
       await client.query('COMMIT');
       return false;
     }
 
-    await client.query(`
-      INSERT INTO payments (stripe_session_id, stripe_payment_intent, user_id, amount_cents, currency, credits, status, paid_at)
-      VALUES ($1,$2,$3,$4,$5,$6,'paid',NOW())
-      ON CONFLICT (stripe_session_id) DO UPDATE SET
-        stripe_payment_intent = EXCLUDED.stripe_payment_intent,
-        amount_cents = EXCLUDED.amount_cents,
-        currency = EXCLUDED.currency,
-        credits = EXCLUDED.credits,
-        status = 'paid',
-        paid_at = COALESCE(payments.paid_at, NOW())
-    `, [
-      session.id,
-      typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id || null,
-      userId,
-      Number(session.amount_total || 499),
-      String(session.currency || 'usd'),
-      credits
-    ]);
+    if (!userId) userId = String(existing.rows[0]?.user_id || '').trim();
+    if (!userId) {
+      await client.query('ROLLBACK');
+      return false;
+    }
+
+    const amountCents = Number(payment.total_amount ?? payment.amount ?? 499) || 499;
+    const currency = String(payment.currency || 'EUR').toLowerCase();
+    const safeWebhookId = webhookId ? String(webhookId) : null;
+
+    if (existing.rowCount) {
+      await client.query(`
+        UPDATE dodo_payments SET
+          payment_id = $2,
+          webhook_id = COALESCE($3, webhook_id),
+          product_id = COALESCE($4, product_id),
+          amount_cents = $5,
+          currency = $6,
+          credits = $7,
+          status = 'paid',
+          metadata = $8::jsonb,
+          paid_at = COALESCE(paid_at, NOW())
+        WHERE id = $1
+      `, [existing.rows[0].id, paymentId, safeWebhookId, purchasedProductId, amountCents, currency, credits, JSON.stringify(metadata)]);
+    } else {
+      await client.query(`
+        INSERT INTO dodo_payments
+          (checkout_session_id, payment_id, webhook_id, user_id, product_id, amount_cents, currency, credits, status, metadata, paid_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'paid',$9::jsonb,NOW())
+      `, [checkoutSessionId, paymentId, safeWebhookId, userId, purchasedProductId, amountCents, currency, credits, JSON.stringify(metadata)]);
+    }
 
     const balanceResult = await client.query(`
       UPDATE users SET credits = credits + $2, updated_at = NOW()
       WHERE id = $1
       RETURNING credits
     `, [userId, credits]);
-    if (!balanceResult.rowCount) throw new Error('Utilisateur Stripe introuvable.');
+    if (!balanceResult.rowCount) throw new Error('Utilisateur Dodo Payments introuvable.');
     const balance = Number(balanceResult.rows[0].credits || 0);
 
     await client.query(`
       INSERT INTO credit_transactions (user_id, delta, balance_after, type, reference, metadata)
       VALUES ($1,$2,$3,'purchase',$4,$5::jsonb)
-    `, [userId, credits, balance, session.id, JSON.stringify({ amountTotal: session.amount_total, currency: session.currency })]);
+    `, [userId, credits, balance, paymentId, JSON.stringify({
+      provider: 'dodo_payments',
+      checkoutSessionId,
+      amountTotal: amountCents,
+      currency,
+      productId: purchasedProductId
+    })]);
 
     await client.query('COMMIT');
     return true;
   } catch (error) {
     await client.query('ROLLBACK');
+    // A replay can race with another delivery. If the unique payment id already won, it is safely idempotent.
+    if (error?.code === '23505') return false;
     throw error;
   } finally {
     client.release();

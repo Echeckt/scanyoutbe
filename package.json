@@ -1,8 +1,8 @@
 {
   "name": "scan-ytb",
-  "version": "5.0.0",
+  "version": "5.1.0",
   "private": true,
-  "description": "ScanYTB - paid YouTube intelligence searches with accounts, credits and Stripe Checkout.",
+  "description": "ScanYTB - paid YouTube intelligence searches with accounts, credits and Dodo Payments.",
   "type": "module",
   "engines": {
     "node": ">=20"
@@ -17,7 +17,6 @@
     "express": "^5.1.0",
     "helmet": "^8.1.0",
     "pg": "^8.16.3",
-    "bcryptjs": "^2.4.3",
-    "stripe": "^18.0.0"
+    "bcryptjs": "^2.4.3"
   }
 }
