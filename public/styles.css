@@ -1330,3 +1330,144 @@ th { background: #0d1218; }
     gap: 5px;
   }
 }
+
+/* V5.4.1 — lisibilité renforcée : polices plus grandes sans changer les fonctionnalités */
+body { font-size: 16px; }
+
+.brand-copy strong { font-size: 18px; }
+.nav-item { font-size: 15px; }
+.sidebar-note strong { font-size: 15px; }
+.sidebar-note p,
+.sidebar-note a { font-size: 13px; }
+
+.top-search span { font-size: 14px; }
+kbd { font-size: 11px; }
+.quiet-link { font-size: 14px; }
+
+.eyebrow { font-size: 13px; }
+.hero-copy > h1 { font-size: 18px; }
+.hero-title { font-size: clamp(42px, 4.25vw, 66px); }
+.hero-copy > p { font-size: 18px; line-height: 1.7; }
+.hero-account-button { min-height: 38px; padding: 0 14px; font-size: 14px; }
+.credit-pill { min-height: 42px; padding: 0 14px; font-size: 15px; }
+
+.search-field input { font-size: 17px; }
+input::placeholder { font-size: inherit; }
+select { font-size: 15px; }
+.button { min-height: 50px; font-size: 15px; }
+.button.small,
+.button.compact { min-height: 40px; font-size: 14px; }
+.quick-queries > span { font-size: 13px; }
+.quick-queries button { font-size: 13px; padding: 6px 10px; }
+.option-label { font-size: 11px; }
+.option-group select { font-size: 15px; }
+.mode-btn { font-size: 14px; }
+.deep-hint strong { font-size: 15px; }
+.deep-hint span { font-size: 13px; line-height: 1.55; }
+.search-price-note { font-size: 13px; }
+.search-price-note strong { font-size: 15px; }
+.search-price-note small { font-size: 12px; }
+
+.metric-card strong { font-size: 30px; }
+.metric-card small { font-size: 13px; }
+.telemetry strong { font-size: 19px; }
+.telemetry span { font-size: 12px; }
+
+h2 { font-size: 32px; }
+.muted { font-size: 15px; }
+.text-link { font-size: 13px; }
+.sort-control > span { font-size: 11px; }
+.bulk-progress-top { font-size: 13px; }
+
+.channel-table-head { font-size: 11px; }
+.channel-name { font-size: 17px; }
+.channel-meta { font-size: 13px; }
+.channel-stat strong { font-size: 16px; }
+.channel-stat span { font-size: 11px; }
+.fr-badge,
+.cache-badge,
+.discover-badge { font-size: 11px; padding: 4px 8px; }
+.scan-select { font-size: 14px; }
+
+.domain-rank { font-size: 13px; }
+.domain-name { font-size: 16px; }
+.domain-sub { font-size: 12px; }
+.domain-count { font-size: 13px; }
+
+.filter-search input,
+.filters select { font-size: 14px; }
+table { font-size: 13px; }
+th { font-size: 11px; }
+td { font-size: 13px; }
+.badge { font-size: 10px; }
+.empty-state,
+.empty-cell { font-size: 14px; }
+
+.export-icon { font-size: 13px; }
+.export-card strong { font-size: 16px; }
+.export-card small { font-size: 13px; }
+.export-card b { font-size: 18px; }
+
+.footer { font-size: 12px; }
+.toast { font-size: 14px; }
+.pagination-btn { font-size: 13px; }
+.pagination-info { font-size: 13px; }
+
+.auth-tab { font-size: 14px; }
+.auth-form label > span { font-size: 11px; }
+.auth-form input { font-size: 15px; }
+.modal-card p { font-size: 14px; }
+.purchase-summary span { font-size: 11px; }
+.purchase-summary strong { font-size: 18px; }
+.purchase-protection { font-size: 13px; }
+.account-credit-box strong { font-size: 28px; }
+.account-credit-box span { font-size: 11px; }
+.account-history-head strong { font-size: 18px; }
+.account-history-head span { font-size: 12px; }
+.history-main strong { font-size: 14px; }
+.history-main span { font-size: 12px; }
+.history-count { font-size: 13px; }
+.history-open { font-size: 12px; }
+.history-status { font-size: 10px; }
+.history-empty { font-size: 13px; }
+.admin-badge { font-size: 11px; }
+
+@media (max-width: 920px) {
+  .top-search span { font-size: 12.5px; }
+  .hero-title { font-size: clamp(36px, 8.2vw, 46px); }
+  .hero-copy > p { font-size: 15px; }
+  .search-field input,
+  select,
+  .option-group select,
+  .filter-search input,
+  .filters select { font-size: 15px; }
+  .button,
+  .button.small,
+  .button.compact,
+  .scan-select { font-size: 14px; }
+  .metric-card strong { font-size: 25px; }
+  .metric-card small { font-size: 12px; }
+  .channel-name { font-size: 16px; }
+  .channel-stat strong { font-size: 15px; }
+  .fr-badge,
+  .cache-badge,
+  .discover-badge { font-size: 10px; }
+  table { font-size: 12px; }
+  th { font-size: 10px; }
+  td { font-size: 12px; }
+}
+
+@media (max-width: 620px) {
+  .nav-item { font-size: 14px; }
+  .hero-title { font-size: clamp(34px, 9.5vw, 42px); }
+  .hero-copy > p { font-size: 14px; }
+  .quick-queries > span,
+  .quick-queries button { font-size: 12px; }
+  h2 { font-size: 26px; }
+  .muted { font-size: 14px; }
+  .metric-card strong { font-size: 22px; }
+  .metric-card small,
+  .telemetry span,
+  .domain-sub,
+  .footer { font-size: 11px; }
+}
