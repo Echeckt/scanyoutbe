@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#07090c">
+  <title>Politique de confidentialité — ScanYTB</title>
+  <meta name="description" content="Politique de confidentialité de l’extension Chrome ScanYTB — YouTube Link Scanner.">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <style>
+    :root {
+      --bg: #07090c;
+      --panel: #0f1319;
+      --border: #252d38;
+      --text: #f6f7f9;
+      --muted: #9ba4b2;
+      --orange: #ff7417;
+      --orange-2: #ff9552;
+    }
+    * { box-sizing: border-box; }
+    html { color-scheme: dark; }
+    body {
+      margin: 0;
+      min-width: 320px;
+      background:
+        radial-gradient(circle at 15% 0%, rgba(255,116,23,.10), transparent 28rem),
+        radial-gradient(circle at 85% 0%, rgba(56,76,105,.12), transparent 28rem),
+        var(--bg);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      -webkit-font-smoothing: antialiased;
+      line-height: 1.7;
+    }
+    a { color: inherit; }
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      border-bottom: 1px solid rgba(255,255,255,.06);
+      background: rgba(7,9,12,.82);
+      backdrop-filter: blur(18px);
+    }
+    .topbar-inner {
+      width: min(980px, calc(100% - 36px));
+      min-height: 70px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+    }
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+      font-weight: 850;
+      font-size: 19px;
+      letter-spacing: -.02em;
+    }
+    .brand-mark {
+      width: 38px;
+      height: 38px;
+      display: grid;
+      place-items: center;
+      border-radius: 11px;
+      background: linear-gradient(145deg, var(--orange-2), var(--orange));
+      box-shadow: 0 12px 28px rgba(255,116,23,.22);
+    }
+    .brand-mark::before {
+      content: "";
+      width: 0;
+      height: 0;
+      border-top: 8px solid transparent;
+      border-bottom: 8px solid transparent;
+      border-left: 12px solid white;
+      margin-left: 3px;
+    }
+    .back-link {
+      color: #aab2be;
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 700;
+    }
+    .back-link:hover { color: var(--orange-2); }
+    main {
+      width: min(920px, calc(100% - 36px));
+      margin: 0 auto;
+      padding: 70px 0 90px;
+    }
+    .eyebrow {
+      color: var(--orange);
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+    }
+    h1 {
+      margin: 10px 0 18px;
+      max-width: 800px;
+      font-size: clamp(40px, 7vw, 66px);
+      line-height: 1;
+      letter-spacing: -.05em;
+    }
+    .intro {
+      max-width: 780px;
+      margin: 0 0 42px;
+      color: #a5adba;
+      font-size: 18px;
+    }
+    .notice {
+      margin: 0 0 34px;
+      padding: 18px 20px;
+      border: 1px solid rgba(255,116,23,.28);
+      border-radius: 16px;
+      background: linear-gradient(135deg, rgba(255,116,23,.09), rgba(255,116,23,.025));
+      color: #d5dae1;
+    }
+    article {
+      overflow: hidden;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      background: linear-gradient(180deg, rgba(255,255,255,.018), transparent), var(--panel);
+      box-shadow: 0 26px 80px rgba(0,0,0,.28);
+    }
+    section {
+      padding: 30px 32px;
+      border-top: 1px solid #202732;
+    }
+    section:first-child { border-top: 0; }
+    h2 {
+      margin: 0 0 12px;
+      font-size: 21px;
+      letter-spacing: -.02em;
+    }
+    p { margin: 0 0 13px; color: var(--muted); }
+    p:last-child { margin-bottom: 0; }
+    ul {
+      margin: 12px 0 0;
+      padding-left: 22px;
+      color: var(--muted);
+    }
+    li { margin: 6px 0; }
+    strong { color: #fff; }
+    .inline-link { color: var(--orange-2); text-decoration: none; }
+    .inline-link:hover { text-decoration: underline; }
+    footer {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      padding-top: 26px;
+      color: #657080;
+      font-size: 13px;
+    }
+    @media (max-width: 620px) {
+      .topbar-inner { width: calc(100% - 24px); min-height: 62px; }
+      .back-link { font-size: 12px; }
+      main { width: calc(100% - 24px); padding: 46px 0 60px; }
+      h1 { font-size: 42px; }
+      .intro { font-size: 16px; }
+      section { padding: 24px 20px; }
+      footer { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="/" aria-label="Retour à ScanYTB">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span>ScanYTB</span>
+      </a>
+      <a class="back-link" href="/">← Retour à ScanYTB</a>
+    </div>
+  </header>
+
+  <main>
+    <div class="eyebrow">Confidentialité</div>
+    <h1>Politique de confidentialité</h1>
+    <p class="intro">
+      Cette politique décrit la manière dont l’extension Chrome <strong>ScanYTB — YouTube Link Scanner</strong>
+      traite les informations lorsqu’elle est utilisée sur YouTube.
+    </p>
+
+    <div class="notice">
+      <strong>En bref :</strong> l’extension analyse localement la page YouTube ouverte afin d’identifier les liens et domaines
+      visibles dans la description. Elle ne transmet pas automatiquement le contenu analysé aux serveurs de ScanYTB.
+    </div>
+
+    <article>
+      <section>
+        <h2>1. Fonctionnement de l’extension</h2>
+        <p>
+          ScanYTB analyse la page YouTube actuellement consultée afin d’identifier les liens et noms de domaine présents
+          dans la description d’une vidéo, ainsi que certaines informations publiques liées à la vidéo ou à la chaîne.
+        </p>
+        <p>
+          Cette analyse permet à l’utilisateur d’identifier rapidement les outils, sites, sponsors, réseaux sociaux et
+          autres liens mentionnés dans les contenus YouTube.
+        </p>
+      </section>
+
+      <section>
+        <h2>2. Données consultées</h2>
+        <p>Lorsque l’utilisateur ouvre l’extension sur YouTube, ScanYTB peut lire les informations publiques de la page concernée, notamment :</p>
+        <ul>
+          <li>le titre de la vidéo ;</li>
+          <li>le nom de la chaîne YouTube ;</li>
+          <li>l’URL publique de la vidéo ou de la chaîne ;</li>
+          <li>l’image publique de la chaîne lorsqu’elle est disponible ;</li>
+          <li>le texte de la description de la vidéo ;</li>
+          <li>les liens hypertextes et noms de domaine présents dans cette description.</li>
+        </ul>
+        <p>
+          <strong>ScanYTB n’accède pas aux mots de passe, e-mails, messages privés, moyens de paiement ou autres données privées du compte Google de l’utilisateur.</strong>
+        </p>
+      </section>
+
+      <section>
+        <h2>3. Traitement local</h2>
+        <p>
+          Les informations présentes sur la page YouTube sont analysées localement dans le navigateur afin d’afficher les liens
+          et domaines détectés dans l’interface de l’extension.
+        </p>
+        <p>
+          L’extension ne transmet pas automatiquement le contenu des pages YouTube consultées vers les serveurs de ScanYTB.
+        </p>
+      </section>
+
+      <section>
+        <h2>4. Ouverture de ScanYTB</h2>
+        <p>
+          Certaines fonctionnalités permettent à l’utilisateur d’ouvrir volontairement
+          <a class="inline-link" href="https://scan-ytb.com/">scan-ytb.com</a> afin d’effectuer une recherche ou une analyse complémentaire.
+        </p>
+        <p>
+          Cette action est déclenchée uniquement lorsque l’utilisateur clique volontairement sur un bouton de l’extension.
+          Des informations publiques telles qu’un nom de chaîne ou un nom de domaine peuvent être ajoutées à l’URL afin de préremplir la recherche sur ScanYTB.
+        </p>
+      </section>
+
+      <section>
+        <h2>5. Données personnelles</h2>
+        <p>L’extension ScanYTB ne collecte pas directement d’informations permettant d’identifier personnellement l’utilisateur.</p>
+        <p>Elle ne collecte notamment pas le nom, l’adresse e-mail, l’adresse postale, les mots de passe, les données bancaires, les données de santé, les communications privées ou la position GPS de l’utilisateur.</p>
+      </section>
+
+      <section>
+        <h2>6. Historique de navigation</h2>
+        <p>
+          ScanYTB n’a pas pour objectif de suivre l’historique de navigation de l’utilisateur. L’extension fonctionne uniquement
+          sur les pages YouTube auxquelles elle est autorisée à accéder afin de fournir sa fonctionnalité principale.
+        </p>
+      </section>
+
+      <section>
+        <h2>7. Vente et partage des données</h2>
+        <p>ScanYTB ne vend pas les données des utilisateurs.</p>
+        <p>
+          Les informations traitées par l’extension ne sont pas utilisées à des fins publicitaires, de profilage, de détermination
+          de solvabilité ou de prêt, et ne sont pas transférées à des tiers à des fins sans rapport avec la fonctionnalité principale de l’extension.
+        </p>
+      </section>
+
+      <section>
+        <h2>8. Code distant</h2>
+        <p>
+          L’extension n’exécute pas de code JavaScript ou WebAssembly distant. Le code nécessaire à son fonctionnement est inclus
+          dans le package distribué via le Chrome Web Store.
+        </p>
+      </section>
+
+      <section>
+        <h2>9. Sécurité et permissions</h2>
+        <p>
+          Nous limitons les permissions de l’extension aux fonctionnalités nécessaires à son fonctionnement et cherchons à minimiser
+          les données auxquelles elle accède.
+        </p>
+      </section>
+
+      <section>
+        <h2>10. Modifications de cette politique</h2>
+        <p>
+          Cette politique de confidentialité peut être mise à jour si les fonctionnalités de ScanYTB évoluent. La version disponible
+          sur cette page constitue la version actuellement applicable.
+        </p>
+      </section>
+
+      <section>
+        <h2>11. Contact</h2>
+        <p>
+          Pour toute question concernant cette politique ou l’extension ScanYTB, contacte-nous depuis
+          <a class="inline-link" href="https://scan-ytb.com/">scan-ytb.com</a>.
+        </p>
+      </section>
+    </article>
+
+    <footer>
+      <span>Dernière mise à jour : 17 septembre 2026</span>
+      <span>ScanYTB — YouTube Link Scanner</span>
+    </footer>
+  </main>
+</body>
+</html>

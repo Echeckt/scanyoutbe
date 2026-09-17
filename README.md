@@ -152,3 +152,10 @@ La home accepte maintenant deux deep links utilisés par l’extension officiell
 - `/?domain=exemple.com&source=chrome-extension` ouvre la section Liens et lance la recherche globale de ce NDD après authentification.
 
 Aucune recherche payante n’est lancée automatiquement depuis l’extension : le bouton de recherche reste une action volontaire de l’utilisateur.
+
+
+## V5.5.1 — Privacy
+
+- Ajout de `https://scan-ytb.com/privacy` pour la politique de confidentialité de l'extension Chrome.
+- Ajout du lien Confidentialité dans le footer.
+- Ajout de `/privacy` au sitemap.

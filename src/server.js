@@ -778,6 +778,10 @@ app.get('/api/export.csv', requirePaidAccess, async (_req, res, next) => {
   }
 });
 
+app.get('/privacy', (_req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'public', 'privacy.html'));
+});
+
 app.get('/{*splat}', (_req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
 });
