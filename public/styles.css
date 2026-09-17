@@ -213,8 +213,8 @@ svg {
   border-radius: 7px;
   background: var(--signal-soft);
   color: var(--signal);
-  font-size: 11px;
 }
+.sidebar-note .mini-icon svg { width: 12px; height: 12px; }
 .sidebar-note strong { display: block; font-size: 12.5px; font-weight: 650; }
 .sidebar-note p {
   margin: 4px 0 9px;
@@ -351,7 +351,6 @@ kbd {
 .orbit-two { width: 980px; height: 980px; top: -560px; border-color: rgba(16, 18, 22, .022); }
 
 .yt-cube {
-  display: none;
   position: absolute;
   top: 18px;
   right: 20px;
@@ -385,7 +384,7 @@ kbd {
 .hero-topline {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   gap: 12px;
   margin-bottom: clamp(16px, 2.4vw, 26px);
 }
@@ -417,7 +416,11 @@ kbd {
   box-shadow: 0 0 0 3px var(--signal-soft);
 }
 
+/* Doublon avec le bouton compte de la barre du haut : masqué.
+   Pour le réafficher, supprimer la ligne "display: none" ci-dessous
+   et remettre .hero-topline en justify-content: space-between. */
 .hero-account-button {
+  display: none;
   height: 30px;
   padding: 0 12px;
   border: 1px solid var(--line);
@@ -743,9 +746,8 @@ input:focus { border-color: var(--signal-line); box-shadow: 0 0 0 3px var(--sign
   border-radius: 9px;
   background: var(--surface-3);
   color: var(--ink-2);
-  font-size: 15px;
-  line-height: 1;
 }
+.metric-icon svg { width: 16px; height: 16px; }
 
 .metric-card strong {
   display: block;
@@ -929,8 +931,16 @@ h2 {
   font-weight: 650;
   letter-spacing: -.015em;
 }
-.channel-open { flex: none; font-size: 11px; color: var(--faint); }
-.channel-open:hover { color: var(--signal); }
+.channel-open {
+  flex: none;
+  width: 13px;
+  height: 13px;
+  font-size: 0;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239aa0aa' stroke-width='2.1' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 17 17 7M9 7h8v8'/%3E%3C/svg%3E") center / 13px 13px no-repeat;
+}
+.channel-open:hover {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23e0500f' stroke-width='2.1' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 17 17 7M9 7h8v8'/%3E%3C/svg%3E");
+}
 
 .channel-meta { font-size: 11.5px; color: var(--muted); }
 .channel-meta strong { color: var(--ink-2); }
@@ -1212,7 +1222,8 @@ button.export-card { font: inherit; color: inherit; }
 }
 .export-card strong { display: block; font-size: 13px; font-weight: 650; }
 .export-card small { display: block; margin-top: 2px; font-size: 11.5px; color: var(--muted); }
-.export-card b { font-size: 13px; font-weight: 500; color: var(--faint); }
+.export-card b { display: inline-grid; place-items: center; color: var(--faint); }
+.export-card b svg { width: 15px; height: 15px; }
 .export-card:hover:not(:disabled) b { color: var(--signal); }
 
 /* =========================================================
@@ -1298,10 +1309,9 @@ body.modal-open { overflow: hidden; }
   border-radius: 8px;
   background: var(--surface-2);
   color: var(--muted);
-  font-size: 15px;
-  line-height: 1;
   transition: color .14s ease, border-color .14s ease;
 }
+.modal-close svg { width: 13px; height: 13px; }
 .modal-close:hover { color: var(--ink); border-color: var(--line-strong); }
 
 .modal-icon {
@@ -1316,6 +1326,7 @@ body.modal-open { overflow: hidden; }
   font-size: 14px;
   font-weight: 700;
 }
+.modal-icon svg { width: 17px; height: 17px; }
 .account-modal-icon { background: var(--cool-soft); color: var(--cool); }
 .credit-modal-icon {
   background: linear-gradient(160deg, var(--signal-2), var(--signal));

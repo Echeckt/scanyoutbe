@@ -4,7 +4,14 @@
   "description": "Scanner YouTube : trouver les liens, outils et sponsors des chaînes.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#07090c",
-  "theme_color": "#0a0d12",
-  "icons": []
+  "background_color": "#f3f3f1",
+  "theme_color": "#f3f3f1",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
 }
