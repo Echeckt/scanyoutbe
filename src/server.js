@@ -289,7 +289,7 @@ app.post('/api/billing/verify-payment', requireAuth, async (req, res, next) => {
 app.get('/api/health', async (_req, res) => {
   res.json({
     ok: true,
-    version: '5.4.0',
+    version: '5.5.0',
     youtubeKeyConfigured: Boolean(process.env.YOUTUBE_API_KEY),
     databaseConfigured: hasDatabase(),
     dodoConfigured: dodoConfigured(),

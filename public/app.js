@@ -766,6 +766,7 @@ async function handleAuthSubmit(event) {
     } else {
       await loadAccountHistory();
     }
+    await handleExtensionDeepLink();
   } catch (error) {
     errorBox.textContent = error.message;
     errorBox.hidden = false;
@@ -952,6 +953,47 @@ function setMode(mode) {
   updateSearchHint();
 }
 
+function clearDeepLinkParams(...keys) {
+  const url = new URL(window.location.href);
+  keys.forEach((key) => url.searchParams.delete(key));
+  if ([...url.searchParams.keys()].length === 0) url.search = '';
+  history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+}
+
+async function handleExtensionDeepLink() {
+  const params = new URLSearchParams(window.location.search);
+  const source = params.get('source');
+  const domain = String(params.get('domain') || '').trim();
+  const query = String(params.get('q') || '').trim();
+
+  if (domain && looksLikeDomain(domain)) {
+    $('#linkFilter').value = domain;
+    state.linkPage = 1;
+    document.querySelector('#links')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    if (!state.user) {
+      $('#linkSearchMeta').textContent = `Connecte-toi pour chercher ${domain} dans toute la base.`;
+      setAuthMode('login');
+      openAuthModal('login');
+      return;
+    }
+
+    await searchAllLinksByDomain(domain);
+    clearDeepLinkParams('domain', 'source');
+    if (source === 'chrome-extension') toast(`Recherche ScanYTB ouverte pour ${domain}.`);
+    return;
+  }
+
+  if (query) {
+    $('#query').value = query;
+    updateSearchHint();
+    document.querySelector('#home')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    window.setTimeout(() => $('#query')?.focus(), 250);
+    clearDeepLinkParams('q', 'source');
+    if (source === 'chrome-extension') toast(`Chaîne préremplie : ${query}`);
+  }
+}
+
 $('#discoverForm').addEventListener('submit', discover);
 $('#query')?.addEventListener('input', updateSearchHint);
 $('#authForm')?.addEventListener('submit', handleAuthSubmit);
@@ -1062,3 +1104,4 @@ await loadSession();
 await handlePaymentReturn();
 await Promise.all([loadHealth(), refreshStats()]);
 if (state.user) await Promise.all([loadLinks(), loadDomains(), loadAccountHistory()]);
+await handleExtensionDeepLink();

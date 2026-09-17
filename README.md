@@ -1,4 +1,4 @@
-# ScanYTB V5.4 — Dodo Payments + compte admin + recherche NDD exacte
+# ScanYTB V5.5 — Dodo Payments + compte admin + recherche NDD exacte
 
 ScanYTB analyse les chaînes YouTube françaises et extrait les liens présents dans les descriptions. Cette version ajoute les comptes utilisateurs, les crédits de recherche et le paiement unique via Dodo Payments.
 
@@ -142,3 +142,13 @@ Le cache de recherche distingue maintenant `keyword` et `domain`, ce qui empêch
 - cache de découverte versionné pour ne pas réutiliser les anciens résultats étroits.
 
 La recherche NDD dans la section **Liens détectés** reste disponible : seule l’ancienne détection automatique d’un NDD dans le champ principal a été supprimée.
+
+
+## V5.5 — intégration extension Chrome
+
+La home accepte maintenant deux deep links utilisés par l’extension officielle :
+
+- `/?q=NomDeLaChaine&source=chrome-extension` préremplit la recherche principale sans la lancer automatiquement ;
+- `/?domain=exemple.com&source=chrome-extension` ouvre la section Liens et lance la recherche globale de ce NDD après authentification.
+
+Aucune recherche payante n’est lancée automatiquement depuis l’extension : le bouton de recherche reste une action volontaire de l’utilisateur.
