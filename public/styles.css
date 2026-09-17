@@ -279,6 +279,32 @@ svg {
   background: var(--signal);
 }
 
+/* Lien externe vers l'extension Chrome */
+.nav-external {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-2);
+  transition: border-color .14s ease, color .14s ease, background .14s ease;
+}
+.nav-external:hover {
+  border-color: var(--signal-line);
+  background: var(--signal-soft);
+  color: var(--signal);
+}
+.nav-external .ext-icon { width: 15px; height: 15px; color: var(--faint); }
+.nav-external:hover .ext-icon { color: var(--signal); }
+.nav-external span { flex: 1; min-width: 0; }
+.nav-external .ext-arrow { width: 11px; height: 11px; color: var(--faint); }
+.nav-external:hover .ext-arrow { color: var(--signal); }
+
 .sidebar-note {
   margin-top: auto;
   padding: 13px;
@@ -1686,6 +1712,9 @@ body.modal-open { overflow: hidden; }
   .nav-item span { display: none; }
   .nav-item svg { width: 17px; height: 17px; }
   .nav-item.active::before { left: -10px; }
+  .nav-external { justify-content: center; height: 38px; padding: 0; margin-top: 10px; }
+  .nav-external span, .nav-external .ext-arrow { display: none; }
+  .nav-external .ext-icon { width: 16px; height: 16px; }
   .search-main-row { grid-template-columns: minmax(0, 1fr) 120px 160px; }
   .search-options-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .dashboard-grid { grid-template-columns: minmax(0, 1fr); }
@@ -1721,6 +1750,16 @@ body.modal-open { overflow: hidden; }
   .nav-item span { display: inline; font-size: 12.5px; }
   .nav-item svg { display: none; }
   .nav-item.active::before { display: none; }
+  .nav-external {
+    height: 32px;
+    margin-top: 0;
+    padding: 0 11px;
+    border-radius: 999px;
+    white-space: nowrap;
+    font-size: 12.5px;
+  }
+  .nav-external span { display: inline; flex: none; }
+  .nav-external .ext-icon, .nav-external .ext-arrow { display: none; }
 
   .topbar { top: 51px; gap: 10px; padding: 0 14px; min-height: 52px; flex-wrap: nowrap; }
   .top-search { flex: 1 1 auto; width: auto; }

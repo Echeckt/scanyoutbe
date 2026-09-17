@@ -8,18 +8,7 @@
   <title>Politique de confidentialité — ScanYTB</title>
   <meta name="description" content="Politique de confidentialité de l’extension Chrome ScanYTB — YouTube Link Scanner.">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-  <script>
-    // Reprend le thème choisi sur ScanYTB (sombre par défaut).
-    (function () {
-      var theme = 'dark';
-      try { if (localStorage.getItem('scanytb-theme') === 'light') theme = 'light'; } catch (e) {}
-      document.documentElement.setAttribute('data-theme', theme);
-      document.addEventListener('DOMContentLoaded', function () {
-        var meta = document.querySelector('meta[name="theme-color"]');
-        if (meta) meta.setAttribute('content', theme === 'light' ? '#f3f3f1' : '#0b0c0f');
-      });
-    })();
-  </script>
+  <script src="/theme.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <style>
